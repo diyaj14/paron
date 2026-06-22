@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@mem0/opencode-plugin": "^0.2.0"
+  }
+}
