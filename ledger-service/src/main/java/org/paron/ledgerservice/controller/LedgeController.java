@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+
 @RestController
 public class LedgeController {
 
@@ -16,7 +17,7 @@ public class LedgeController {
         ledgeService.reserveFund();
     }
 
-    @PostMapping('/release')
+    @PostMapping("/release")
     public void releaseFund(){
         ledgeService.releaseFund();
     }

@@ -1,0 +1,60 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: token-service
+
+  # ─── Supabase PostgreSQL connection ───────────────────────────────────────
+  # Replace the placeholders below with your actual Supabase values.
+  # Go to: Supabase Dashboard → Your Project → Settings → Database → URI
+  datasource:
+    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}
+    username: ${SUPABASE_USER}
+    password: ${SUPABASE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5          # Supabase free tier has connection limits
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      # "update" = JPA creates/alters tables automatically on startup.
+      # Change to "validate" once your schema is stable.
+      ddl-auto: update
+    show-sql: false                  # Set to true while debugging
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+# ─── JWT configuration ────────────────────────────────────────────────────
+# jwt.secret MUST be at least 64 characters (512 bits) for HS512 signing.
+# Generate one with:  openssl rand -base64 64
+jwt:
+  secret: ${JWT_SECRET}
+  # How long (hours) an offline spending token stays valid before auto-expiring
+  offline-token-expiry-hours: 6
+  # How long (hours) a service-to-service auth token stays valid
+  service-token-expiry-hours: 24
+
+# ─── Actuator (health endpoint for Railway) ───────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# ─── Logging ──────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.offlinepay.token: DEBUG
+    org.springframework.security: INFO
+#ledger client
+services:
+  ledger:
+    url: http://localhost:8082

@@ -20,20 +20,20 @@ import java.util.List;
 @Slf4j
 public class TokenController {
 
-    @Autowired TokenService tokenService
+    @Autowired TokenService tokenService;
 
     /*Generate token for user*/
     @PostMapping("/gettoken")
     public ResponseEntity<TokenResponse> giveToken(@Valid @RequestBody TokenRequest tokenRequest){
-        log.info("Token generation request recieved for user with id {}",tokenRequest.getId())
-        TokenResponse tokenResponse=TokenService.generateToken();
+        log.info("Token generation request recieved for user with id {}",tokenRequest.getUserId());
+        TokenResponse tokenResponse=tokenService.generateToken(tokenRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(tokenResponse);
     }
 
     /*Validate token before transaction*/
     @GetMapping("/validateToken")
     public ResponseEntity<ValidateTokenResponse> validate(@Valid @RequestBody ValidateTokenRequest request){
-        ValidateTokenResponse validate =TokenService.validate(request);
+        ValidateTokenResponse validate =tokenService.validate(request);
         return ResponseEntity.ok(validate);
     }
 
@@ -51,7 +51,7 @@ public class TokenController {
      */
     @GetMapping("/history/{userId}")
     public ResponseEntity<List<TokenResponse>> getTokenHistory(@Valid @RequestParam String userId){
-        List<TokenResponse> response=tokenService.getHistory(userId);
+        List<TokenResponse> response=tokenService.getTokenHistory(userId);
         return ResponseEntity.ok(response);
     }
 
