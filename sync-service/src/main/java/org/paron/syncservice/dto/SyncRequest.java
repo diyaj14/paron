@@ -5,6 +5,9 @@ import jakarta.validation.constraints.NotEmpty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.paron.syncservice.model.OfflineTransaction;
+
+import java.util.List;
+
 /*the mobile app sends a list of json body of transactions that
 *would be done online
 eg:-

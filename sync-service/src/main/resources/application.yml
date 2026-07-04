@@ -1,0 +1,103 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: sync-service
+
+  datasource:
+    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}
+    username: ${SUPABASE_USER}
+    password: ${SUPABASE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # ─── Spring Batch ─────────────────────────────────────────────────────────
+  # Spring Batch needs its own metadata tables (BATCH_JOB_INSTANCE etc.)
+  # to track job runs, step status, and restart points. "always" creates
+  # them automatically on startup using the same Supabase database.
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: false   # we trigger jobs manually from the Kafka consumer,
+      # not automatically on every app startup
+
+  # ─── Kafka ────────────────────────────────────────────────────────────────
+  # Upstash Kafka (free tier) gives you a bootstrap server + SASL credentials.
+  # Locally during development, point this at a docker-compose Kafka instead.
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    properties:
+      sasl.mechanism: ${KAFKA_SASL_MECHANISM:}
+      security.protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+      sasl.jaas.config: ${KAFKA_JAAS_CONFIG:}
+    consumer:
+      group-id: sync-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.offlinepay.sync.dto
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    topic:
+      offline-transactions: offline.transactions
+
+  # ─── Redis (Upstash free tier, or local docker-compose) ───────────────────
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+
+# ─── URLs of the other services this service depends on ──────────────────
+services:
+  ledger:
+    url: ${LEDGER_SERVICE_URL:http://localhost:8082}
+  token:
+    url: ${TOKEN_SERVICE_URL:http://localhost:8081}
+
+# ─── Resilience4j — protects against a slow/unavailable ledger-service ────
+resilience4j:
+  circuitbreaker:
+    instances:
+      ledgerService:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+  retry:
+    instances:
+      ledgerService:
+        max-attempts: 3
+        wait-duration: 1s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,circuitbreakers
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.offlinepay.sync: DEBUG
+    org.springframework.kafka: INFO
+    org.springframework.batch: INFO
