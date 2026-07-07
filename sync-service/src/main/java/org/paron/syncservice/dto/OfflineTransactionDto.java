@@ -3,6 +3,7 @@ package org.paron.syncservice.dto;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.Data;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -12,6 +13,7 @@ import java.time.LocalDateTime;
 made serialaizable because kafka `spring integration expects
 message payload to be serialazable
  */
+@Data
 public class OfflineTransactionDto implements Serializable{
     @NotBlank(message="device transactionId is required")
     private String deviceTransactionId;
