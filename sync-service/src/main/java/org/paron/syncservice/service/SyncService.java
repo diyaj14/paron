@@ -6,13 +6,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.paron.syncservice.dto.OfflineTransactionDto;
 import org.paron.syncservice.dto.SyncRequest;
 import org.paron.syncservice.dto.SyncResponse;
+import org.paron.syncservice.kafka.TransactionProducer;
+import org.paron.syncservice.exception.SyncException;
 import org.paron.syncservice.model.OfflineTransaction;
+import org.paron.syncservice.repository.OfflineTransactionRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/*here we defince sync rules- max no of transactions
+/*here we defince sync rules max no of transactions
 that ca be made by single device during a sync,
 each transaction is published indivdually
 if a failure happens in one transaction, it doesnt effect
@@ -26,25 +29,27 @@ the entire batch
 @RequiredArgsConstructor
 public class SyncService {
 
+    private final OfflineTransactionRepository transactionRepository;
+    private final TransactionProducer transactionProducer;
     private static final int MAX_BATCH_SIZE = 100;
 
-    public syncResponse submitTransactions(SyncRequest request){
+    public SyncResponse submitTransactions(SyncRequest request) {
 
-        if(request.size()>MAX_BATCH_SIZE){
-            throw new SyncException("BATCH_TOO_lARGE","MAXIMUM" +MAX_BATCH_SIZE + " transactions per sync request. " +
+        if (request.getTransactions().size() > MAX_BATCH_SIZE) {
+            throw new SyncException("BATCH_TOO_LARGE", "MAXIMUM" + MAX_BATCH_SIZE + " transactions per sync request. " +
                     "Received: " + request.getTransactions().size());
         }
 
-        List<String> acceptedIds  = new ArrayList<>();
-        List<String> failedIds    = new ArrayList<>();
+        List<String> acceptedIds = new ArrayList<>();
+        List<String> failedIds = new ArrayList<>();
 
-        for(OfflineTransactionDto txn : request.getTransactions()){
-            try{
+        for (OfflineTransactionDto txn : request.getTransactions()) {
+            try {
                 transactionProducer.publish(txn);
-                acceptedIds.add(txn.getdeviceTransactionId());
+                acceptedIds.add(txn.getDeviceTransactionId());
                 log.debug("Published to Kafka. deviceTransactionId={}",
                         txn.getDeviceTransactionId());
-            }catch (Exception e) {
+            } catch (Exception e) {
                 // One Kafka publish failure should not abort the whole batch.
                 // Log it and continue — the device can retry just this one
                 // on the next sync.
@@ -52,19 +57,21 @@ public class SyncService {
                         txn.getDeviceTransactionId(), e);
                 failedIds.add(txn.getDeviceTransactionId());
             }
-            log.info("Sync request complete. accepted={}, failed={}",
-                    acceptedIds.size(), failedIds.size());
-
-            String message = failedIds.isEmpty()
-                    ? "All transactions accepted and queued for settlement"
-                    : acceptedIds.size() + " accepted, " + failedIds.size() +
-                      " failed to queue (retry those on next sync)";
-            return SyncResponse.builder()
-                    .message(message)
-                    .acceptedCount(acceptedIds.size())
-                    .acceptedDeviceTransactionIds(acceptedIds)
-                    .build();
         }
+        log.info("Sync request complete. accepted={}, failed={}",
+                acceptedIds.size(), failedIds.size());
+
+        String message = failedIds.isEmpty()
+                ? "All transactions accepted and queued for settlement"
+                : acceptedIds.size() + " accepted, " + failedIds.size() +
+                  " failed to queue (retry those on next sync)";
+
+        return SyncResponse.builder()
+                .message(message)
+                .acceptedCount(acceptedIds.size())
+                .acceptedDeviceTransactionIds(acceptedIds)
+                .build();
+    }
         /*
          * Returns the full transaction history for a user — every status
          * (RECEIVED, PROCESSING, SETTLED, REJECTED, FAILED) — ordered
@@ -78,5 +85,5 @@ public class SyncService {
             log.debug("Fetching transaction history for userId={}", userId);
             return transactionRepository.findByUserIdOrderByReceivedAtDesc(userId);
         }
-    }
 }
+

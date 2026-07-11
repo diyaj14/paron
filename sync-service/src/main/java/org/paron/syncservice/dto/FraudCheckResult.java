@@ -1,6 +1,5 @@
 package org.paron.syncservice.dto;
 
-import jdk.jfr.DataAmount;
 import lombok.Builder;
 import lombok.Data;
 

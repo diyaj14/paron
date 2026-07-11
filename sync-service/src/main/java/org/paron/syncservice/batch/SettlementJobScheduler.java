@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.parameters.JobParameters;
 import org.springframework.batch.core.job.parameters.JobParametersBuilder;
-import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.batch.core.launch.JobOperator;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -37,7 +37,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class SettlementJobScheduler {
 
-    private final JobLauncher jobLauncher;
+    private final JobOperator jobOperator;
     private final Job settlementJob;
 
     @Scheduled(fixedRate = 30000)
@@ -47,7 +47,7 @@ public class SettlementJobScheduler {
                     .addLong("runAt", System.currentTimeMillis())
                     .toJobParameters();
 
-            jobLauncher.run(settlementJob, params);
+            jobOperator.start(settlementJob, params);
 
         } catch (Exception e) {
             log.error("Failed to launch settlement job", e);

@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.paron.syncservice.dto.OfflineTransactionDto;
 import org.paron.syncservice.dto.SyncRequest;
 import org.paron.syncservice.dto.SyncResponse;
+import org.paron.syncservice.kafka.TransactionProducer;
 import org.paron.syncservice.model.OfflineTransaction;
 import org.paron.syncservice.repository.OfflineTransactionRepository;
 import org.springframework.http.HttpStatus;
@@ -27,13 +28,14 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
+
 @RestController
 @Slf4j
 @RequiredArgsConstructor
 @RequestMapping("api/v1/sync")
 public class SyncController {
 
-
+    private final TransactionProducer transactionProducer;
     private final OfflineTransactionRepository transactionRepository;
     /*queue to kafka for settling
      */
@@ -43,11 +45,11 @@ public class SyncController {
             ){
         log.info("Sync service recieved with {} transaction",request.getTransactions().size());
 
-        for(OfflineTransaction txn: request.getTransactions()){
+        for(OfflineTransactionDto txn: request.getTransactions()){
             transactionProducer.publish(txn);
         }
         List<String> ids = request.getTransactions().stream()
-                .map(OfflineTransactionDto::getDeviceTransactionId()
+                .map(OfflineTransactionDto::getDeviceTransactionId)
                 .collect(Collectors.toList());
 
         SyncResponse response = SyncResponse.builder()

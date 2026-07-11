@@ -2,10 +2,13 @@ package org.paron.syncservice.batch;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.paron.syncservice.client.FraudCheckClient;
+import org.paron.syncservice.client.TokenServiceClient;
 import org.paron.syncservice.dto.FraudCheckResult;
 import org.paron.syncservice.dto.TokenValidationResult;
 import org.paron.syncservice.model.OfflineTransaction;
 import org.paron.syncservice.model.TransactionStatus;
+import org.paron.syncservice.service.IdempotencyService;
 import org.springframework.batch.infrastructure.item.ItemProcessor;
 import org.springframework.stereotype.Component;
 

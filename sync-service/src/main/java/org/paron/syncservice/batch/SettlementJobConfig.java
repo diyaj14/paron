@@ -4,13 +4,14 @@ import lombok.RequiredArgsConstructor;
 import org.paron.syncservice.model.OfflineTransaction;
 import org.paron.syncservice.model.TransactionStatus;
 import org.paron.syncservice.repository.OfflineTransactionRepository;
+import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.Step;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.infrastructure.item.ItemReader;
 import org.springframework.batch.infrastructure.item.support.ListItemReader;
+import org.springframework.batch.infrastructure.item.ItemReader;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -47,10 +48,11 @@ public class SettlementJobConfig {
                                PlatformTransactionManager transactionManager,
                                ItemReader<OfflineTransaction> settlementReader) {
         return new StepBuilder("settlementStep", jobRepository)
-                .<OfflineTransaction, SettlementContext>chunk(50, transactionManager)
+                .<OfflineTransaction, SettlementContext>chunk(50)
                 .reader(settlementReader)
                 .processor(settlementProcessor)
                 .writer(settlementWriter)
+                .transactionManager(transactionManager)
                 // If a single item throws an unhandled exception, skip it
                 // (log and move on) rather than failing the entire chunk —
                 // one bad transaction shouldn't block 49 good ones in the

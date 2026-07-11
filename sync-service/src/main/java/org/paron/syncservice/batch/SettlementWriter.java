@@ -3,12 +3,17 @@ package org.paron.syncservice.batch;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.paron.syncservice.client.LedgerServiceClient;
+import org.paron.syncservice.client.TokenServiceClient;
 import org.paron.syncservice.model.OfflineTransaction;
 import org.paron.syncservice.model.TransactionStatus;
 import org.paron.syncservice.repository.OfflineTransactionRepository;
+import org.paron.syncservice.service.IdempotencyService;
 import org.springframework.batch.infrastructure.item.Chunk;
 import org.springframework.batch.infrastructure.item.ItemWriter;
 import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
 
 /*
  * The final step — actually moves money and persists the outcome.
@@ -34,6 +39,7 @@ public class SettlementWriter implements ItemWriter<SettlementContext> {
     private final LedgerServiceClient ledgerServiceClient;
     private final TokenServiceClient tokenServiceClient;
     private final OfflineTransactionRepository transactionRepository;
+    private final IdempotencyService idempotencyService;
 
     @Override
     public void write(Chunk<? extends SettlementContext> chunk) {
@@ -42,7 +48,7 @@ public class SettlementWriter implements ItemWriter<SettlementContext> {
 
             // Already rejected or failed during processing — nothing to
             // settle, just persist the outcome the processor decided on.
-            if (context.getReservationId() == null) {
+            if (context.getReservationID() == null) {
                 transactionRepository.save(transaction);
                 log.info("Saved non-settled transaction. status={}, deviceTransactionId={}",
                         transaction.getStatus(), transaction.getDeviceTransactionId());
@@ -50,10 +56,20 @@ public class SettlementWriter implements ItemWriter<SettlementContext> {
             }
             try {
                 // ── Actually move the money ──────────────────────────────────
-                ledgerServiceClient.settle(context.getReservationId(), transaction.getAmount());
+                ledgerServiceClient.settle(context.getReservationID(), transaction.getAmount());
 
                 // ── Tell token-service this token is now spent ──────────────
-                tokenServiceClient.markAsUsed(transaction.getOfflineToken(), transaction.getAmount());
+                // Separate try: if settle() succeeded but markAsUsed() fails,
+                // we MUST NOT retry settle() — that would double-debit.
+                // The money is already moved; a stale token is a lesser problem
+                // that token-service can reconcile independently.
+                try {
+                    tokenServiceClient.markAsUsed(transaction.getOfflineToken(), transaction.getAmount());
+                } catch (Exception markEx) {
+                    log.error("Token markAsUsed failed after successful settle. " +
+                                    "Money moved but token not marked spent. deviceTransactionId={}",
+                            transaction.getDeviceTransactionId(), markEx);
+                }
 
                 transaction.setStatus(TransactionStatus.SETTLED);
                 transaction.setSettledAt(LocalDateTime.now());
@@ -70,6 +86,7 @@ public class SettlementWriter implements ItemWriter<SettlementContext> {
                 // RECEIVED here rather than leaving it stuck on PROCESSING).
                 log.error("Settlement failed for deviceTransactionId={}. Will retry next run.",
                         transaction.getDeviceTransactionId(), e);
+                idempotencyService.releaseClaim(transaction.getDeviceTransactionId());
                 transaction.setStatus(TransactionStatus.RECEIVED);
                 transaction.setRejectionReason("SETTLEMENT_FAILED: " + e.getMessage());
                 transactionRepository.save(transaction);

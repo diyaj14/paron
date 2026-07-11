@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
-import java.net.http.HttpHeaders;
+import org.springframework.http.HttpHeaders;
 import java.util.Map;
 
 @Component
@@ -25,9 +25,9 @@ public class TokenServiceClient {
     @Value("${services.token.url}")
     private String tokenServiceUrl;
 
-    @Retry(name="ledgerService")
+    @Retry(name="tokenService")
     public TokenValidationResult validateToken(String token, BigDecimal spentAmount){
-        String url = tokenServiceUrl + "api/v1/tokens/validate";
+        String url = tokenServiceUrl + "/api/v1/tokens/validate";
 
         Map<String,Object> body = Map.of(
                 "token",token,
@@ -40,7 +40,7 @@ public class TokenServiceClient {
         log.info("Validating token with token-service. spentAmount={}", spentAmount);
         return restTemplate.postForObject(url, requestEntity, TokenValidationResult.class);
     }
-    @Retry(name = "ledgerService")
+    @Retry(name = "tokenService")
     public void markAsUsed(String token, BigDecimal finalSpentAmount) {
         String url = tokenServiceUrl + "/api/v1/tokens/mark-used";
 

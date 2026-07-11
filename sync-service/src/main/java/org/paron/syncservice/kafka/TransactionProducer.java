@@ -11,12 +11,14 @@ Http request comes in
  * see transactions in chronological order).
  */
 
-import lombok.Value;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.paron.syncservice.dto.OfflineTransactionDto;
 import org.springframework.kafka.core.KafkaTemplate;
 
 @Slf4j
+@RequiredArgsConstructor
 public class TransactionProducer {
 
     private final KafkaTemplate<String, OfflineTransactionDto> kafkaTemplate;

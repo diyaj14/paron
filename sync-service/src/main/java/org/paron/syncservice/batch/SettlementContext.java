@@ -24,6 +24,6 @@ import org.paron.syncservice.model.OfflineTransaction;
 @Data
 @RequiredArgsConstructor
 public class SettlementContext {
-    private OfflineTransaction transaction;
-    private String reservationID; //null if transaction rejected
+    private final OfflineTransaction transaction;
+    private final String reservationID; //null if transaction rejected
 }
