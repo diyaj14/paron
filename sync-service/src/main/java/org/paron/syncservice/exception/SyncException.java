@@ -1,5 +1,8 @@
 package org.paron.syncservice.exception;
 
+import lombok.Data;
+
+@Data
 public class SyncException extends RuntimeException{
 
     private final String errorCode;
@@ -7,10 +10,6 @@ public class SyncException extends RuntimeException{
     public SyncException(String errorCode,String message){
         super(message);
         this.errorCode=errorCode;
-    }
-
-    public String getErrorCode(){
-        return errorCode;
     }
 
 }

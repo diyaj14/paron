@@ -1,5 +1,6 @@
 package org.paron.syncservice.dto;
 
+import lombok.Builder;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -7,6 +8,7 @@ import java.math.BigDecimal;
 * validatetokenResponse of tokenresponse)
  */
 @Data
+@Builder
 public class TokenValidationResult {
     private boolean valid;
     private String userId;
