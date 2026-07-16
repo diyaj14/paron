@@ -15,18 +15,15 @@ package org.paron.syncservice.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.paron.syncservice.dto.OfflineTransactionDto;
 import org.paron.syncservice.dto.SyncRequest;
 import org.paron.syncservice.dto.SyncResponse;
-import org.paron.syncservice.kafka.TransactionProducer;
 import org.paron.syncservice.model.OfflineTransaction;
-import org.paron.syncservice.repository.OfflineTransactionRepository;
+import org.paron.syncservice.service.SyncService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 
 @RestController
@@ -35,8 +32,8 @@ import java.util.stream.Collectors;
 @RequestMapping("api/v1/sync")
 public class SyncController {
 
-    private final TransactionProducer transactionProducer;
-    private final OfflineTransactionRepository transactionRepository;
+    private final SyncService syncService;
+
     /*queue to kafka for settling
      */
     @PostMapping
@@ -45,27 +42,16 @@ public class SyncController {
             ){
         log.info("Sync service recieved with {} transaction",request.getTransactions().size());
 
-        for(OfflineTransactionDto txn: request.getTransactions()){
-            transactionProducer.publish(txn);
-        }
-        List<String> ids = request.getTransactions().stream()
-                .map(OfflineTransactionDto::getDeviceTransactionId)
-                .collect(Collectors.toList());
-
-        SyncResponse response = SyncResponse.builder()
-                .message("Transactions accepted and queued for settling")
-                .acceptedCount(ids.size())
-                .acceptedDeviceTransactionIds(ids)
-                .build();
+        SyncResponse response = syncService.submitTransactions(request);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 
     /* show confirmation to user about the total number of transactions
     that were recieved regardless of the status
      */
-    @GetMapping
+    @GetMapping("/{userId}")
     public ResponseEntity<List<OfflineTransaction>> getStatus(@PathVariable String userId){
-              List<OfflineTransaction> transactions = transactionRepository.findByUserIdOrderByReceivedAtDesc(userId);
+              List<OfflineTransaction> transactions = syncService.getStatusForUser(userId);
               return ResponseEntity.ok(transactions);
     }
 

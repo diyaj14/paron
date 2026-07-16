@@ -36,7 +36,7 @@ public class SyncService {
     public SyncResponse submitTransactions(SyncRequest request) {
 
         if (request.getTransactions().size() > MAX_BATCH_SIZE) {
-            throw new SyncException("BATCH_TOO_LARGE", "MAXIMUM" + MAX_BATCH_SIZE + " transactions per sync request. " +
+            throw new SyncException("BATCH_TOO_LARGE", "Maximum " + MAX_BATCH_SIZE + " transactions per sync request. " +
                     "Received: " + request.getTransactions().size());
         }
 

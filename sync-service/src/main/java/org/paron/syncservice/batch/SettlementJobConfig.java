@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import org.paron.syncservice.model.OfflineTransaction;
 import org.paron.syncservice.model.TransactionStatus;
 import org.paron.syncservice.repository.OfflineTransactionRepository;
-import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
