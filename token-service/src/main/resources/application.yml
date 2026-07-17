@@ -52,7 +52,7 @@ management:
 # ─── Logging ──────────────────────────────────────────────────────────────
 logging:
   level:
-    com.offlinepay.token: DEBUG
+    org.paron: DEBUG
     org.springframework.security: INFO
 #ledger client
 services:

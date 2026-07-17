@@ -52,7 +52,7 @@ public class SyncServiceTest {
         SyncRequest request = new SyncRequest();
         request.setTransactions(List.of(validTxn));
 
-        SyncResponse response=syncService.submitTransactions(request);
+        SyncResponse response=syncService.submitTransactions(request, "user_demo");
 
         assertThat(response.getAcceptedCount()).isEqualTo(1);
         assertThat(response.getAcceptedDeviceTransactionIds()).contains("device-txn-001");
@@ -76,7 +76,7 @@ public class SyncServiceTest {
         SyncRequest request = new SyncRequest();
         request.setTransactions(bigBatch);
 
-        assertThatThrownBy(() -> syncService.submitTransactions(request))
+        assertThatThrownBy(() -> syncService.submitTransactions(request, "user_demo"))
                 .isInstanceOf(SyncException.class)
                 .hasMessageContaining("Maximum 100 transactions");
 
@@ -100,7 +100,7 @@ public class SyncServiceTest {
         doThrow(new RuntimeException("Kafka unavailable"))
                 .when(transactionProducer).publish(txn2);
 
-        SyncResponse response = syncService.submitTransactions(request);
+        SyncResponse response = syncService.submitTransactions(request, "user_demo");
 
         // Only the first one was accepted
         assertThat(response.getAcceptedCount()).isEqualTo(1);

@@ -29,4 +29,12 @@ public class OfflineTransactionDto implements Serializable{
 
     @NotNull(message="transaction time is required")
     private LocalDateTime transactedAt;
+
+    /*Populated server-side by SyncController — the device never sends
+     *its own userId (that would be spoofable). The userId comes from
+     *the authenticated session or URL, and gets stamped onto every
+     *transaction before Kafka publish so fraud-service can do
+     *per-user velocity checks.
+     */
+    private String userId;
 }

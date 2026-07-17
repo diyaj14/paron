@@ -36,13 +36,14 @@ public class SyncController {
 
     /*queue to kafka for settling
      */
-    @PostMapping
+    @PostMapping("/{userId}")
     public ResponseEntity<SyncResponse> syncTransactions(
+            @PathVariable String userId,
             @Valid @RequestBody SyncRequest request
             ){
-        log.info("Sync service recieved with {} transaction",request.getTransactions().size());
+        log.info("Sync service recieved from userId={} with {} transaction", userId, request.getTransactions().size());
 
-        SyncResponse response = syncService.submitTransactions(request);
+        SyncResponse response = syncService.submitTransactions(request, userId);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 

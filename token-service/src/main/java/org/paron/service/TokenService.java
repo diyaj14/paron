@@ -171,11 +171,11 @@ public class TokenService {
         tokenRepository.save(record);
         log.info("Token marked as USED. tokenId={}, finalSpent={}",
                 record.getId(), request.getFinalSpentAmount());
-        /*So right now, money never actually leaves the bank. The ledger service needs
-     a settle/deduct endpoint (e.g., POST /deduct) that would actually move the
-     reserved funds out of the user's account. The markAsUsed should call that
-     endpoint, or the sync-service should call it separately. */
 
+        // Call ledger-service to settle the reservation (debit spent amount, release remainder)
+        ledgerServiceClient.settleReservation(record.getReservationId(), request.getFinalSpentAmount());
+        log.info("Ledger settlement completed. reservationId={}, spentAmount={}",
+                record.getReservationId(), request.getFinalSpentAmount());
     }
 
     // 4. TOKEN HISTORY

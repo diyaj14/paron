@@ -33,7 +33,7 @@ public class SyncService {
     private final TransactionProducer transactionProducer;
     private static final int MAX_BATCH_SIZE = 100;
 
-    public SyncResponse submitTransactions(SyncRequest request) {
+    public SyncResponse submitTransactions(SyncRequest request, String userId) {
 
         if (request.getTransactions().size() > MAX_BATCH_SIZE) {
             throw new SyncException("BATCH_TOO_LARGE", "Maximum " + MAX_BATCH_SIZE + " transactions per sync request. " +
@@ -45,10 +45,11 @@ public class SyncService {
 
         for (OfflineTransactionDto txn : request.getTransactions()) {
             try {
+                txn.setUserId(userId);
                 transactionProducer.publish(txn);
                 acceptedIds.add(txn.getDeviceTransactionId());
-                log.debug("Published to Kafka. deviceTransactionId={}",
-                        txn.getDeviceTransactionId());
+                log.debug("Published to Kafka. deviceTransactionId={}, userId={}",
+                        txn.getDeviceTransactionId(), userId);
             } catch (Exception e) {
                 // One Kafka publish failure should not abort the whole batch.
                 // Log it and continue — the device can retry just this one

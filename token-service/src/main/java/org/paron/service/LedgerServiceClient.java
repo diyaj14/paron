@@ -19,7 +19,7 @@ import java.util.Map;
  * In production you would use:
  *   - Spring Cloud OpenFeign (declarative HTTP client) — much cleaner
  *   - Or WebClient (reactive, non-blocking)
- * For simplicity we use RestTemplate here which you already know.
+ * For simplicity we use RestTemplate here
  */
 
 @Component
@@ -30,7 +30,8 @@ public class LedgerServiceClient {
 /*When you create this object,
  * go open the settings file,
 * find the value at services.ledger.url,
-and plug that value in right here,@allargsconstruotr doesnt help to use @value annotaiton
+and plug that value in right here,
+* @allargsconstruotr doesn't help to use @value annotaiton
 */
     public LedgerServiceClient(RestTemplate restTemplate,@Value("${services.ledger.url}") String ledgerServiceUrl) {
         this.restTemplate = restTemplate;
@@ -79,6 +80,26 @@ and plug that value in right here,@allargsconstruotr doesnt help to use @value a
 
         restTemplate.postForObject(url, requestEntity, Void.class);
 
+    }
+
+    /*
+     * Calls POST /api/v1/ledger/settle on ledger-service.
+     * Used when a token is marked as USED — debits the actual spent amount
+     * and releases any remaining reserved funds back to available balance.
+     */
+    public void settleReservation(String reservationId, BigDecimal spentAmount) {
+        String url = ledgerServiceUrl + "/api/v1/ledger/settle";
+        Map<String, Object> body = Map.of(
+                "reservationId", reservationId,
+                "spentAmount", spentAmount
+        );
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+        log.info("Calling ledger-service to settle reservation. reservationId={}, spentAmount={}",
+                reservationId, spentAmount);
+
+        restTemplate.postForObject(url, requestEntity, Void.class);
     }
 
 

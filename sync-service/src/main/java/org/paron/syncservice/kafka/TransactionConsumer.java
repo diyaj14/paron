@@ -43,7 +43,7 @@ public class TransactionConsumer {
 
         OfflineTransaction transaction = OfflineTransaction.builder()
                 .deviceTransactionId(dto.getDeviceTransactionId())
-                .userId(extractUserIdPlaceholder(dto))   // see note below
+                .userId(dto.getUserId())
                 .offlineToken(dto.getOfflineToken())
                 .amount(dto.getAmount())
                 .merchantId(dto.getMerchantId())
@@ -62,17 +62,5 @@ public class TransactionConsumer {
                     dto.getDeviceTransactionId());
         }
     }
-/*
- * Temporary placeholder — userId isn't directly in the DTO sent by the
- * device (the device only sends the offline token, not the raw userId,
- * since the token IS the proof of identity). The real userId gets
- * properly extracted by decoding the JWT in SettlementProcessor during
- * token validation. We store a placeholder here just so the column
- * isn't left null; SettlementProcessor overwrites it with the real
- * value once the token is decoded.
- */
-        private String extractUserIdPlaceholder(OfflineTransactionDto dto) {
-            return "PENDING_TOKEN_DECODE";
-        }
 }
 
