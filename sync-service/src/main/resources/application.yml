@@ -6,7 +6,7 @@ spring:
     name: sync-service
 
   datasource:
-    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}
+    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}?sslmode=require
     username: ${SUPABASE_USER}
     password: ${SUPABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -71,6 +71,8 @@ services:
     url: ${LEDGER_SERVICE_URL:http://localhost:8082}
   token:
     url: ${TOKEN_SERVICE_URL:http://localhost:8081}
+  fraud:
+    url: ${FRAUD_SERVICE_URL:http://localhost:8084}
 
 # ─── Resilience4j — protects against a slow/unavailable ledger-service ────
 resilience4j:
@@ -84,6 +86,9 @@ resilience4j:
   retry:
     instances:
       ledgerService:
+        max-attempts: 3
+        wait-duration: 1s
+      fraudService:
         max-attempts: 3
         wait-duration: 1s
 

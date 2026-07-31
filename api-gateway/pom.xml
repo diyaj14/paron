@@ -11,11 +11,73 @@
 
     <artifactId>api-gateway</artifactId>
 
+    <properties>
+        <!-- Spring Cloud 2025.1.x (Oakwood) supports Spring Boot 4.0.x / 4.1.x -->
+        <spring-cloud.version>2025.1.2</spring-cloud.version>
+        <!-- Same jjwt version as token-service, so key handling stays consistent -->
+        <jjwt.version>0.12.6</jjwt.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
+
+        <!-- Spring Cloud Gateway - routing engine.
+             WebFlux/Reactor Netty based. This REPLACES spring-boot-starter-web:
+             Spring Boot cannot run both the servlet (MVC) and reactive (WebFlux)
+             stacks in the same app, and Gateway only works on WebFlux.
+             NOTE: in the 2025.1.x train Gateway was modularized - the starter is
+             now spring-cloud-starter-gateway-server-webflux, and the old
+             spring-cloud-starter-gateway / spring-cloud-starter-gateway-redis
+             artifacts no longer exist. The Redis-backed RequestRateLimiter
+             (RedisRateLimiter) is bundled in this module. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
+        </dependency>
+
+        <!-- JWT library - verifies user session JWTs (RS256) in AuthFilter -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>${jjwt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Actuator - expose /actuator/health for the gateway itself -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+
+        <!-- Test dependencies -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>

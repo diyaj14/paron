@@ -1,43 +1,70 @@
 package org.paron.syncservice.client;
 
+import io.github.resilience4j.retry.annotation.Retry;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.paron.syncservice.dto.FraudCheckResult;
 import org.paron.syncservice.model.OfflineTransaction;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
 
-import java.math.BigDecimal;
+import java.util.Map;
 
-/* This class exists specifically so SettlementProcessor never needs to
- * change when fraud-service is eventually built. SettlementProcessor
- * calls check(transaction) and gets back a FraudCheckResult — exactly
- * the same shape a real HTTP call to fraud-service would return.
-        * Swapping this implementation for a RestTemplate call later is a
- * one-class change, not a redesign of the settlement pipeline.
-        *
- * The one rule implemented here for now: reject any single offline
- * transaction over ₹5,000 as suspicious, since our token-service already
- * caps offline reservations at ₹10,000 total — a single transaction
- * that large within one offline session is an anomaly worth a closer look.
- */
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class FraudCheckClient {
-    private static final BigDecimal SINGLE_TXN_THRESHOLD = new BigDecimal("5000.00");
 
+    private final RestTemplate restTemplate;
+
+    @Value("${services.fraud.url}")
+    private String fraudServiceUrl;
+
+    @Retry(name = "fraudService")
     public FraudCheckResult check(OfflineTransaction transaction) {
-        if (transaction.getAmount().compareTo(SINGLE_TXN_THRESHOLD) > 0) {
-            log.warn("Fraud check flagged large single transaction. amount={}, deviceTransactionId={}",
-                    transaction.getAmount(), transaction.getDeviceTransactionId());
+        String url = fraudServiceUrl + "/api/v1/fraud/check";
+
+        Map<String, Object> body = Map.of(
+                "userId", transaction.getUserId(),
+                "deviceTransactionId", transaction.getDeviceTransactionId(),
+                "offlineToken", transaction.getOfflineToken(),
+                "amount", transaction.getAmount(),
+                "merchantId", transaction.getMerchantId() != null ? transaction.getMerchantId() : "",
+                "transactedAt", transaction.getTransactedAt() != null ? transaction.getTransactedAt().toString() : "",
+                "deviceId", "",
+                "tokenExpiryTime", ""
+        );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        log.info("Calling fraud-service for transaction. deviceTransactionId={}, userId={}",
+                transaction.getDeviceTransactionId(), transaction.getUserId());
+
+        Map<?, ?> response = restTemplate.postForObject(url, request, Map.class);
+
+        if (response == null) {
+            log.warn("fraud-service returned null, defaulting to APPROVE");
             return FraudCheckResult.builder()
-                    .score(0.8)
-                    .approved(false)
-                    .reason("SINGLE_TRANSACTION_AMOUNT_ANOMALY")
+                    .score(0.0)
+                    .approved(true)
+                    .reason(null)
                     .build();
         }
 
+        double score = ((Number) response.get("score")).doubleValue();
+        String decision = (String) response.get("decision");
+        String reason = (String) response.get("reason");
+
         return FraudCheckResult.builder()
-                .score(0.1)
-                .approved(true)
+                .score(score)
+                .approved("APPROVE".equals(decision))
+                .reason(reason)
                 .build();
     }
 }

@@ -7,7 +7,7 @@ spring:
 
   # Same Supabase project as token-service, different tables (accounts, reservations)
   datasource:
-    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}
+    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}?sslmode=require
     username: ${SUPABASE_USER}
     password: ${SUPABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver

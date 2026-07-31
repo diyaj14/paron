@@ -2,13 +2,18 @@ package org.paron.fraudservice.model;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
-import org.apache.kafka.common.Uuid;
+import lombok.NoArgsConstructor;
+
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @AllArgsConstructor
+@NoArgsConstructor
+@Builder
 @Data
 @Entity
 @Table(name = "fraud_alerts")
@@ -19,11 +24,11 @@ public class FraudAlert {
     String transactionId;
     String userId;
     BigDecimal amount;
-    String riskScore;
-    String riskLevel;
+    double riskScore;
+    RiskLevel riskLevel;
     String triggeredRules;
     String status;
-    String createdAt;
-    String reviewedAt;
+    LocalDateTime createdAt;
+    LocalDateTime reviewedAt;
     String reviewerNotes;
 }
