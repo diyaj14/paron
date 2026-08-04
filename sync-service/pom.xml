@@ -37,10 +37,27 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- Apache Kafka - the conveyor belt for queueing offline transactions -->
+        <!-- Apache Kafka - the conveyor belt for queueing offline transactions.
+             Spring Boot 4 requires the starter (not bare spring-kafka) to
+             activate Kafka auto-configuration (KafkaTemplate, @KafkaListener, spring.kafka.*). -->
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-kafka</artifactId>
+        </dependency>
+
+        <!-- Jackson 2 for Kafka JsonSerializer/JsonDeserializer.
+             Spring Boot 4.1 bundles Jackson 3 (tools.jackson), but spring-kafka's
+             Json*Serializer still needs Jackson 2 (com.fasterxml.jackson). -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- jsr310 so spring-kafka's Jackson 2 ObjectMapper (JacksonUtils.enhancedObjectMapper)
+             registers JavaTimeModule and can serialize LocalDateTime (OfflineTransactionDto). -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
         <!-- Spring Batch - the framework that processes settlement in reliable steps -->

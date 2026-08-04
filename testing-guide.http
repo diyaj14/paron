@@ -1,0 +1,255 @@
+### ─────────────────────────────────────────────────────────────────────────────
+### OfflinePay — End-to-End Manual Test Collection
+### Works in IntelliJ IDEA (HTTP Client) and VS Code (REST Client).
+###
+### SETUP BEFORE RUNNING (see Testing Guide):
+###   1. docker compose up -d          -> Kafka :9092 + Redis :6379 healthy
+###   2. .\set-env.ps1                 -> Supabase + queue creds
+###   3. Set JWT_SECRET and JWT_PUBLIC_KEY (see .env.example)
+###   4. Boot the 4 services (ports 8081-8084) and the gateway (8080)
+###   5. Paste the RS256 session JWT below into {{sessionToken}}
+###
+### Run top-to-bottom. After Step 2, copy the `token` value from its response
+### into {{offlineToken}} (used by Steps 4-6, 9, N5, N6).
+### Note: the response does NOT include `reservationId` — it is not used by any
+### request in this file, so you can leave {{reservationId}} as-is.
+### ─────────────────────────────────────────────────────────────────────────────
+
+@base_gateway = http://localhost:8080
+@base_token   = http://localhost:8081
+@base_ledger  = http://localhost:8082
+@base_sync    = http://localhost:8083
+@base_fraud   = http://localhost:8084
+
+@userId = user_abc123
+@sessionToken = eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyX2FiYzEyMyIsInJvbGUiOiJVU0VSIiwiaWF0IjoxNzg1Njk5MjI0LCJleHAiOjE3ODU3ODU2MjR9.pZIDb6KI6rgqHMqaBfquQRRnBjGNjWJr0jhSRL_VowipM5NivEPh_fQHzKHMJhNMpN0DCz9oOowCxLJQZwQnpjPb9fDPNUTzEceec12QoK0MIyOKHdJ2SqXrPS0WNhSXaQ_ekyf8t0p_GUEcYHlBWqhcJPD2w41ZeNnC11Y2hW0E75eZxLmH4KYxbcIX2X8KFyksGyMaLnH67uuutDBl4A-4R_8K9MFA6ZiSWqtkFN4QKM-HZff3XITT2VZA648idv3UUqxRmg8F91EczKwEXCoELqFrpr07M_c5-w5yvUg_GtCTATaf0FCX_MEWX6nM8BU0TFUbcmyOQDiguIyaqg
+@offlineToken = eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ1c2VyX2FiYzEyMyIsInRva2VuSWQiOiIwNWEyYTI4ZC1jODRiLTRjOTQtOTcwMC1jOTk2ZmMzNmUxMDEiLCJyZXNlcnZhdGlvbklkIjoiNzg4ZmIxMjctZjZhYS00MTI3LWE1ZmYtZTY3ZDliZDZmZTc3IiwibWF4QW1vdW50IjoiNTAwLjAwIiwiaWF0IjoxNzg1NzgxODAxLCJleHAiOjE3ODU4MDM0MDF9.EnUYEWYWISXRckkZ0IQFOMt50q_QVZreq8MSG8RCXe0tW7pPVMUmzgcr4FN1SgbSsx6lHODh2hYr3Y2ComV74Q
+
+
+### ═══════════════════════════════════════════════════════════════════════════
+### PART 1 — HAPPY PATH
+### ═══════════════════════════════════════════════════════════════════════════
+
+### Step 0 — Ping all backends through the gateway (public, no auth)
+GET {{base_gateway}}/api/v1/tokens/ping
+# -> 200 token-service is running
+
+###
+GET {{base_gateway}}/api/v1/ledger/ping
+# -> 200 ledger-service is running
+
+###
+GET {{base_gateway}}/api/v1/sync/ping
+# -> 200 sync-service is running
+
+###
+GET {{base_gateway}}/api/v1/fraud/ping
+# -> 200 fraud-service is running
+
+
+### Step 1 — Create a test account (ledger, internal)
+POST {{base_ledger}}/api/v1/ledger/accounts/create-test-account
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "initialBalance": 1000.00
+}
+# -> 201  {userId, totalBalance: 1000.00, availableBalance: 1000.00}
+
+
+### Step 2 — Issue an offline token (token-service, internal)
+###   Also reserves ₹500 via ledger: availableBalance 1000 -> 500.
+###   Copy the `token` value from the response into {{offlineToken}}.
+###   (The `reservationId` is NOT returned here; it is only embedded inside the
+###   JWT's payload. No request in this file needs it, so leave it alone.)
+POST {{base_token}}/api/v1/tokens/gettoken
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "amount": 500.00,
+  "expiryHours": 6
+}
+# -> 201  TokenResponse {tokenId, token: <JWT>, userId, maxAmount: 500.00,
+#        issuedAt, expiresAt, status: "ACTIVE", message}
+
+
+### Step 3 — Check balance via gateway (proves RS256 auth + X-User-Id header)
+GET {{base_gateway}}/api/v1/ledger/balance/{{userId}}
+Authorization: Bearer {{sessionToken}}
+# -> 200  {userId, totalBalance: 1000.00, availableBalance: 500.00, reservedAmount: 500.00}
+
+
+### Step 4 — Validate the offline token (token-service, internal)
+###   GET with a request body (call via curl/Postman if your client rejects it).
+GET {{base_token}}/api/v1/tokens/validateToken
+Content-Type: application/json
+
+{
+  "token": "{{offlineToken}}",
+  "spentAmount": 0
+}
+# -> 200  {valid: true, userId, reservationId, maxAmount: 500.00,
+#        spentAmount: 0, reason: null}
+
+
+### Step 5 — Fraud check (fraud-service, internal)
+POST {{base_fraud}}/api/v1/fraud/check
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "deviceTransactionId": "txn-1",
+  "offlineToken": "{{offlineToken}}",
+  "deviceId": "device_1",
+  "amount": 150.00,
+  "merchantId": "merchant_abc",
+  "transactedAt": "2026-07-31T10:30:00",
+  "tokenExpiryTime": "2026-07-31T16:00:00"
+}
+# -> 200  {score: <small>, decision: "APPROVE", reason: "NONE"}
+#        (approved iff score < 0.7)
+
+
+### Step 6 — Mark used -> settles the reservation (token-service, internal)
+###   ₹300 debited from total, ₹200 released back to available.
+POST {{base_token}}/api/v1/tokens/mark-used
+Content-Type: application/json
+
+{
+  "token": "{{offlineToken}}",
+  "finalSpentAmount": 300.00
+}
+# -> 200  "Token marked as used successfully"
+#   Logs: "Token marked as USED..." then "Ledger settlement completed..."
+
+
+### Step 7 — Balance after settlement (gateway)
+GET {{base_gateway}}/api/v1/ledger/balance/{{userId}}
+Authorization: Bearer {{sessionToken}}
+# -> 200  {totalBalance: 700.00, availableBalance: 700.00, reservedAmount: 0.00}
+
+
+### Step 8 — Token history (gateway; note token is null, status USED)
+GET {{base_gateway}}/api/v1/tokens/history/{{userId}}
+Authorization: Bearer {{sessionToken}}
+# -> 200  [{tokenId, token: null, userId, maxAmount: 500.00, status: "USED", ...}]
+
+
+### Step 9 — Sync a batch (gateway -> sync-service -> Kafka -> batch -> settle)
+POST {{base_gateway}}/api/v1/sync/{{userId}}
+Authorization: Bearer {{sessionToken}}
+Content-Type: application/json
+
+{
+  "transactions": [
+    {
+      "deviceTransactionId": "txn-1",
+      "offlineToken": "{{offlineToken}}",
+      "amount": 300.00,
+      "merchantId": "merchant_abc",
+      "transactedAt": "2026-07-31T10:30:00"
+    }
+  ]
+}
+# -> 202  {message, acceptedCount: 1, acceptedDeviceTransactionIds: ["txn-1"]}
+#   Watch sync-service logs: publish -> consume -> Spring Batch settle.
+
+
+### Step 10 — Sync status for the user (gateway)
+GET {{base_gateway}}/api/v1/sync/{{userId}}
+Authorization: Bearer {{sessionToken}}
+# -> 200  [OfflineTransaction with transaction status]
+
+
+### Step 11 — Fraud alert list + review (gateway)
+GET {{base_gateway}}/api/v1/fraud/alerts
+Authorization: Bearer {{sessionToken}}
+# -> 200  [FraudAlertResponse list]
+
+PUT {{base_gateway}}/api/v1/fraud/alerts/<ALERT_ID>/review
+Authorization: Bearer {{sessionToken}}
+Content-Type: application/json
+
+{
+  "status": "RESOLVED",
+  "reviewerNotes": "false positive - trusted merchant"
+}
+# -> 200
+
+
+### Step 12 — Gateway health passthrough (public)
+GET {{base_gateway}}/actuator/sync-service/health
+# -> 200  {"status":"UP"}
+
+
+### ═══════════════════════════════════════════════════════════════════════════
+### PART 2 — NEGATIVE PATHS
+### ═══════════════════════════════════════════════════════════════════════════
+
+### N1 — Gateway: no Authorization header
+GET {{base_gateway}}/api/v1/ledger/balance/{{userId}}
+# -> 401  {"error":"UNAUTHORIZED","message":"Missing or invalid Authorization header"}
+
+
+### N2 — Gateway: garbage/invalid JWT
+GET {{base_gateway}}/api/v1/ledger/balance/{{userId}}
+Authorization: Bearer not.a.real.jwt
+# -> 401  {"error":"UNAUTHORIZED","message":"Invalid or expired token"}
+
+
+### N3 — Double token issue while a token is ACTIVE
+POST {{base_token}}/api/v1/tokens/gettoken
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "amount": 500.00,
+  "expiryHours": 6
+}
+# -> 400  {"errorCode":"ACTIVE_TOKEN_EXISTS","message":"User ... already has an active offline token...","timestamp":...}
+
+
+### N4 — Amount out of range
+POST {{base_token}}/api/v1/tokens/gettoken
+Content-Type: application/json
+
+{
+  "userId": "some_other_user",
+  "amount": 20000.00,
+  "expiryHours": 6
+}
+# -> 400  {"errorCode":"VALIDATION_FAILED","message":"Request validation failed","fieldErrors":{"amount":"..."}}
+
+
+### N5 — Overspend on validate
+GET {{base_token}}/api/v1/tokens/validateToken
+Content-Type: application/json
+
+{
+  "token": "{{offlineToken}}",
+  "spentAmount": 600.00
+}
+# -> 200  {valid: false, reason: "AMOUNT_EXCEEDS_LIMIT"}
+
+
+### N6 — Replay mark-used (token is already USED)
+POST {{base_token}}/api/v1/tokens/mark-used
+Content-Type: application/json
+
+{
+  "token": "{{offlineToken}}",
+  "finalSpentAmount": 300.00
+}
+# -> 400  {"errorCode":"TOKEN_ALREADY_USED",...}
+
+
+### N7 — Internal-only endpoint NOT routed through the gateway
+POST {{base_gateway}}/api/v1/fraud/check
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}"
+}
+# -> 404  (no gateway route exists; services call each other directly)

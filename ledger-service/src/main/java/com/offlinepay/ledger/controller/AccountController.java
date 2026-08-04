@@ -1,5 +1,6 @@
 package com.offlinepay.ledger.controller;
 
+import com.offlinepay.ledger.exception.LedgerException;
 import com.offlinepay.ledger.model.Account;
 import com.offlinepay.ledger.repository.AccountRepository;
 import jakarta.validation.constraints.NotBlank;
@@ -32,6 +33,11 @@ public class AccountController {
 
     @PostMapping("/create-test-account")
     public ResponseEntity<Account> createTestAccount(@Valid @RequestBody CreateAccountRequest request) {
+        if (accountRepository.findByUserId(request.getUserId()).isPresent()) {
+            throw new LedgerException("ACCOUNT_ALREADY_EXISTS",
+                    "User " + request.getUserId() + " already has an account. Use /balance/{userId} to check it.");
+        }
+
         Account account = Account.builder()
                 .userId(request.getUserId())
                 .totalBalance(request.getInitialBalance())

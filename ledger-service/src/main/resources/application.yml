@@ -25,6 +25,11 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
 
+ledger:
+  # Hard per-user cap: total amount a single user may hold in ACTIVE
+  # reservations (offline tokens) at any one time.
+  max-active-reserved: 500.00
+
 management:
   endpoints:
     web:
