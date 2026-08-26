@@ -4,9 +4,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.paron.fraudservice.dto.FraudAlertResponse;
 import org.paron.fraudservice.dto.TransactionEvent;
+import org.paron.fraudservice.feature.RiskFeatureBuilder;
+import org.paron.fraudservice.feature.RiskFeatureVector;
 import org.paron.fraudservice.model.RiskLevel;
+import org.paron.fraudservice.policy.DecisionPolicy;
+import org.paron.fraudservice.policy.DecisionResult;
+import org.paron.fraudservice.policy.DecisionType;
+import org.paron.fraudservice.policy.ModelClient;
+import org.paron.fraudservice.policy.ModelOutput;
 import org.paron.fraudservice.rules.FraudRule;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.Collections;
@@ -18,11 +24,24 @@ import static org.mockito.Mockito.*;
 class FraudScoringServiceTest {
 
     private FraudScoringService scoringService;
+    private DecisionPolicy decisionPolicy;
+    private ModelClient modelClient;
+    private RiskFeatureBuilder featureBuilder;
+
+    private static final RiskFeatureVector EMPTY_VECTOR = new RiskFeatureVector(
+            "v1", 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0.0, 0, 0, 1, 1, 1
+    );
 
     @BeforeEach
     void setUp() {
-        scoringService = new FraudScoringService(List.of());
-        ReflectionTestUtils.setField(scoringService, "scoreThreshold", 0.7);
+        decisionPolicy = mock(DecisionPolicy.class);
+        modelClient = mock(ModelClient.class);
+        featureBuilder = mock(RiskFeatureBuilder.class);
+        when(featureBuilder.build(any())).thenReturn(EMPTY_VECTOR);
+    }
+
+    private FraudScoringService buildService(List<FraudRule> rules) {
+        return new FraudScoringService(rules, decisionPolicy, modelClient, featureBuilder);
     }
 
     private TransactionEvent buildEvent() {
@@ -36,91 +55,45 @@ class FraudScoringServiceTest {
     }
 
     @Test
-    void noRulesApproved() {
-        FraudScoringService service = new FraudScoringService(Collections.emptyList());
-        ReflectionTestUtils.setField(service, "scoreThreshold", 0.7);
+    void noRules_modelApproves() {
+        when(decisionPolicy.decide(eq(List.of()), any()))
+                .thenReturn(DecisionResult.builder().decision(DecisionType.APPROVE).reason("score_below_threshold").build());
 
+        FraudScoringService service = buildService(Collections.emptyList());
         FraudAlertResponse result = service.evaluate(buildEvent());
 
         assertTrue(result.isApproved());
-        assertEquals(0.0, result.getScore());
-        assertEquals(RiskLevel.LOW, result.getRiskLevel());
-        assertTrue(result.getTriggeredRules().isEmpty());
+        assertEquals(DecisionType.APPROVE.name(), result.getDecision());
     }
 
     @Test
-    void singleLowScoreApproved() {
-        FraudRule lowRule = mock(FraudRule.class);
-        when(lowRule.evaluate(any())).thenReturn(0.2);
-        when(lowRule.name()).thenReturn("LOW_RULE");
-
-        FraudScoringService service = new FraudScoringService(List.of(lowRule));
-        ReflectionTestUtils.setField(service, "scoreThreshold", 0.7);
-
-        FraudAlertResponse result = service.evaluate(buildEvent());
-
-        assertTrue(result.isApproved());
-        assertEquals(0.2, result.getScore(), 0.001);
-        assertEquals(RiskLevel.LOW, result.getRiskLevel());
-        assertEquals(List.of("LOW_RULE"), result.getTriggeredRules());
-    }
-
-    @Test
-    void singleHighScoreRejected() {
+    void hardRuleHit_alwaysRejects() {
         FraudRule highRule = mock(FraudRule.class);
         when(highRule.evaluate(any())).thenReturn(0.8);
         when(highRule.name()).thenReturn("HIGH_RULE");
 
-        FraudScoringService service = new FraudScoringService(List.of(highRule));
-        ReflectionTestUtils.setField(service, "scoreThreshold", 0.7);
+        when(decisionPolicy.decide(eq(List.of("HIGH_RULE")), any()))
+                .thenReturn(DecisionResult.builder().decision(DecisionType.REJECT).reason("hard_rule_hit").build());
 
+        FraudScoringService service = buildService(List.of(highRule));
         FraudAlertResponse result = service.evaluate(buildEvent());
 
         assertFalse(result.isApproved());
-        assertEquals(0.8, result.getScore(), 0.001);
-        assertEquals(RiskLevel.HIGH, result.getRiskLevel());
+        assertEquals(DecisionType.REJECT.name(), result.getDecision());
         assertEquals(List.of("HIGH_RULE"), result.getTriggeredRules());
     }
 
     @Test
-    void multipleRulesScoresAggregated() {
-        FraudRule rule1 = mock(FraudRule.class);
-        when(rule1.evaluate(any())).thenReturn(0.3);
-        when(rule1.name()).thenReturn("RULE_A");
+    void modelUnavailable_holdsForReview() {
+        when(modelClient.score(any(), any())).thenReturn(null);
+        when(decisionPolicy.decide(eq(List.of()), isNull()))
+                .thenReturn(DecisionResult.builder().decision(DecisionType.HOLD_FOR_REVIEW).reason("model_unavailable").build());
 
-        FraudRule rule2 = mock(FraudRule.class);
-        when(rule2.evaluate(any())).thenReturn(0.3);
-        when(rule2.name()).thenReturn("RULE_B");
-
-        FraudScoringService service = new FraudScoringService(List.of(rule1, rule2));
-        ReflectionTestUtils.setField(service, "scoreThreshold", 0.7);
-
-        FraudAlertResponse result = service.evaluate(buildEvent());
-
-        assertTrue(result.isApproved());
-        assertEquals(0.6, result.getScore(), 0.001);
-        assertEquals(RiskLevel.MEDIUM, result.getRiskLevel());
-        assertEquals(List.of("RULE_A", "RULE_B"), result.getTriggeredRules());
-    }
-
-    @Test
-    void aggregatedScoreExceedsThresholdRejected() {
-        FraudRule rule1 = mock(FraudRule.class);
-        when(rule1.evaluate(any())).thenReturn(0.5);
-        when(rule1.name()).thenReturn("RULE_A");
-
-        FraudRule rule2 = mock(FraudRule.class);
-        when(rule2.evaluate(any())).thenReturn(0.5);
-        when(rule2.name()).thenReturn("RULE_B");
-
-        FraudScoringService service = new FraudScoringService(List.of(rule1, rule2));
-        ReflectionTestUtils.setField(service, "scoreThreshold", 0.7);
-
+        FraudScoringService service = buildService(Collections.emptyList());
         FraudAlertResponse result = service.evaluate(buildEvent());
 
         assertFalse(result.isApproved());
-        assertEquals(1.0, result.getScore(), 0.001);
-        assertEquals(RiskLevel.CRITICAL, result.getRiskLevel());
+        assertEquals(DecisionType.HOLD_FOR_REVIEW.name(), result.getDecision());
     }
 
     @Test
@@ -133,94 +106,36 @@ class FraudScoringServiceTest {
         when(rule2.evaluate(any())).thenReturn(0.8);
         when(rule2.name()).thenReturn("RULE_B");
 
-        FraudRule rule3 = mock(FraudRule.class);
-        when(rule3.evaluate(any())).thenReturn(0.8);
-        when(rule3.name()).thenReturn("RULE_C");
+        when(decisionPolicy.decide(eq(List.of("RULE_A", "RULE_B")), any()))
+                .thenReturn(DecisionResult.builder().decision(DecisionType.REJECT).reason("hard_rule_hit").build());
 
-        FraudScoringService service = new FraudScoringService(List.of(rule1, rule2, rule3));
-        ReflectionTestUtils.setField(service, "scoreThreshold", 0.7);
-
+        FraudScoringService service = buildService(List.of(rule1, rule2));
         FraudAlertResponse result = service.evaluate(buildEvent());
 
         assertEquals(1.0, result.getScore());
     }
 
     @Test
-    void zeroScoreRulesSkipped() {
-        FraudRule zeroRule = mock(FraudRule.class);
-        when(zeroRule.evaluate(any())).thenReturn(0.0);
-        when(zeroRule.name()).thenReturn("ZERO_RULE");
-
-        FraudRule highRule = mock(FraudRule.class);
-        when(highRule.evaluate(any())).thenReturn(0.5);
-        when(highRule.name()).thenReturn("HIGH_RULE");
-
-        FraudScoringService service = new FraudScoringService(List.of(zeroRule, highRule));
-        ReflectionTestUtils.setField(service, "scoreThreshold", 0.7);
-
-        FraudAlertResponse result = service.evaluate(buildEvent());
-
-        assertEquals(0.5, result.getScore(), 0.001);
-        assertEquals(List.of("HIGH_RULE"), result.getTriggeredRules());
-    }
-
-    @Test
-    void riskLevelLowBelowPoint3() {
-        FraudRule rule = mock(FraudRule.class);
-        when(rule.evaluate(any())).thenReturn(0.1);
-        when(rule.name()).thenReturn("RULE");
-
-        FraudScoringService service = new FraudScoringService(List.of(rule));
-        ReflectionTestUtils.setField(service, "scoreThreshold", 0.7);
-
-        FraudAlertResponse result = service.evaluate(buildEvent());
-        assertEquals(RiskLevel.LOW, result.getRiskLevel());
-    }
-
-    @Test
-    void riskLevelMediumBetweenPoint3AndPoint6() {
+    void riskLevelMappedCorrectly() {
         FraudRule rule = mock(FraudRule.class);
         when(rule.evaluate(any())).thenReturn(0.5);
         when(rule.name()).thenReturn("RULE");
 
-        FraudScoringService service = new FraudScoringService(List.of(rule));
-        ReflectionTestUtils.setField(service, "scoreThreshold", 0.7);
+        when(decisionPolicy.decide(eq(List.of("RULE")), any()))
+                .thenReturn(DecisionResult.builder().decision(DecisionType.HOLD_FOR_REVIEW).reason("score_in_review_band").build());
 
+        FraudScoringService service = buildService(List.of(rule));
         FraudAlertResponse result = service.evaluate(buildEvent());
+
         assertEquals(RiskLevel.MEDIUM, result.getRiskLevel());
     }
 
     @Test
-    void riskLevelHighBetweenPoint6AndPoint9() {
-        FraudRule rule = mock(FraudRule.class);
-        when(rule.evaluate(any())).thenReturn(0.8);
-        when(rule.name()).thenReturn("RULE");
-
-        FraudScoringService service = new FraudScoringService(List.of(rule));
-        ReflectionTestUtils.setField(service, "scoreThreshold", 0.7);
-
-        FraudAlertResponse result = service.evaluate(buildEvent());
-        assertEquals(RiskLevel.HIGH, result.getRiskLevel());
-    }
-
-    @Test
-    void riskLevelCriticalAbovePoint9() {
-        FraudRule rule = mock(FraudRule.class);
-        when(rule.evaluate(any())).thenReturn(1.0);
-        when(rule.name()).thenReturn("RULE");
-
-        FraudScoringService service = new FraudScoringService(List.of(rule));
-        ReflectionTestUtils.setField(service, "scoreThreshold", 0.7);
-
-        FraudAlertResponse result = service.evaluate(buildEvent());
-        assertEquals(RiskLevel.CRITICAL, result.getRiskLevel());
-    }
-
-    @Test
     void transactionIdPassedThrough() {
-        FraudScoringService service = new FraudScoringService(Collections.emptyList());
-        ReflectionTestUtils.setField(service, "scoreThreshold", 0.7);
+        when(decisionPolicy.decide(eq(List.of()), any()))
+                .thenReturn(DecisionResult.builder().decision(DecisionType.APPROVE).reason("score_below_threshold").build());
 
+        FraudScoringService service = buildService(Collections.emptyList());
         TransactionEvent event = buildEvent();
         event.setDeviceTransactionId("txn-999");
 

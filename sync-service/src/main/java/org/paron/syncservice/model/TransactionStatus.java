@@ -15,5 +15,6 @@ public enum TransactionStatus {
     PROCESSING,
     SETTLED,
     REJECTED,
+    HELD_FOR_REVIEW,
     FAILED
 }

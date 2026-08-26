@@ -14,4 +14,9 @@ public class FraudAlertResponse {
     private boolean approved;
     private RiskLevel riskLevel;
     private List<String> triggeredRules;
+    private String decision;
+    private Double confidence;
+    private String modelVersion;
+    private String policyVersion;
+    private List<String> reasonCodes;
 }

@@ -1,0 +1,31 @@
+{
+  "version": "v1",
+  "description": "Paron Guard risk feature schema",
+  "features": {
+    "amount": {"type": "continuous", "range": [0.01, 100000], "unit": "INR"},
+    "amount_to_token_limit_ratio": {"type": "continuous", "range": [0.0, 1.0]},
+    "merchant_amount_deviation": {"type": "continuous", "range": [0.0, 10.0]},
+    "user_tx_count_5m": {"type": "count", "range": [0, 100]},
+    "user_tx_count_1h": {"type": "count", "range": [0, 500]},
+    "user_tx_count_24h": {"type": "count", "range": [0, 5000]},
+    "device_tx_count_5m": {"type": "count", "range": [0, 100]},
+    "device_tx_count_1h": {"type": "count", "range": [0, 500]},
+    "device_tx_count_24h": {"type": "count", "range": [0, 5000]},
+    "token_tx_count_24h": {"type": "count", "range": [0, 50]},
+    "user_tx_value_1h": {"type": "continuous", "range": [0.0, 1000000], "unit": "INR"},
+    "device_tx_value_24h": {"type": "continuous", "range": [0.0, 1000000], "unit": "INR"},
+    "token_age_seconds": {"type": "continuous", "range": [0, 86400]},
+    "time_to_expiry_seconds": {"type": "continuous", "range": [-3600, 86400]},
+    "offline_duration_seconds": {"type": "continuous", "range": [0, 86400]},
+    "token_reuse_count": {"type": "count", "range": [0, 50]},
+    "duplicate_payload_hash_count": {"type": "count", "range": [0, 50]},
+    "previous_settlement_failed": {"type": "binary"},
+    "merchant_risk_aggregate": {"type": "continuous", "range": [0.0, 1.0]},
+    "hour_of_day": {"type": "cyclic", "range": [0, 23]},
+    "day_of_week": {"type": "cyclic", "range": [0, 6]},
+    "history_available": {"type": "binary"},
+    "token_age_known": {"type": "binary"},
+    "expiry_known": {"type": "binary"}
+  },
+  "null_policy": "Nulls only allowed for token_age_seconds (when token_age_known=0), time_to_expiry_seconds (when expiry_known=0), or merchant_amount_deviation (always 0.0 acceptable)"
+}

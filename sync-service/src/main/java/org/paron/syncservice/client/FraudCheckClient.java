@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -49,22 +50,34 @@ public class FraudCheckClient {
         Map<?, ?> response = restTemplate.postForObject(url, request, Map.class);
 
         if (response == null) {
-            log.warn("fraud-service returned null, defaulting to APPROVE");
+            log.warn("fraud-service returned null, defaulting to HOLD_FOR_REVIEW (fail-closed)");
             return FraudCheckResult.builder()
                     .score(0.0)
-                    .approved(true)
-                    .reason(null)
+                    .approved(false)
+                    .reason("model_unavailable")
                     .build();
         }
 
         double score = ((Number) response.get("score")).doubleValue();
         String decision = (String) response.get("decision");
         String reason = (String) response.get("reason");
+        Double confidence = response.get("confidence") != null ? ((Number) response.get("confidence")).doubleValue() : null;
+        String modelVersion = (String) response.get("modelVersion");
+        String policyVersion = (String) response.get("policyVersion");
+
+        @SuppressWarnings("unchecked")
+        List<String> reasonCodes = response.get("reasonCodes") != null
+                ? (List<String>) response.get("reasonCodes") : List.of();
 
         return FraudCheckResult.builder()
                 .score(score)
                 .approved("APPROVE".equals(decision))
+                .decision(decision)
                 .reason(reason)
+                .confidence(confidence)
+                .modelVersion(modelVersion)
+                .policyVersion(policyVersion)
+                .reasonCodes(reasonCodes)
                 .build();
     }
 }
