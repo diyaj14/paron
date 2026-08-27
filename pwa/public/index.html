@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0a6cff">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="stylesheet" href="./styles.css">
+    <title>Paron Offline Wallet</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header><span class="logo">P</span><div><h1>Paron</h1><p id="connection-state">Checking connection…</p></div></header>
+      <section class="card wallet"><div><p class="eyebrow">OFFLINE PAYMENT TOKEN</p><strong id="token-amount">No token loaded</strong><p id="token-detail">Connect online to request one.</p></div><span id="token-state" class="chip muted">EMPTY</span></section>
+      <section class="card">
+        <h2>Demo wallet setup</h2>
+        <p class="hint">Use a real token from your API, or enter a demo token for the Bluetooth transfer demonstration.</p>
+        <label>Customer ID <input id="user-id" value="demo-customer"></label>
+        <label>API base URL <input id="api-base" placeholder="https://your-gateway.example"></label>
+        <div class="two"><label>Token amount (₹) <input id="new-token-amount" type="number" min="1" value="500"></label><label>Expiry (hours) <input id="expiry-hours" type="number" min="1" max="24" value="6"></label></div>
+        <div class="actions"><button id="request-token">Request token online</button><button id="create-demo-token" class="secondary">Create demo token</button></div>
+      </section>
+      <section class="card">
+        <h2>Make an offline payment</h2>
+        <label>Merchant ID <input id="merchant-id" value="merchant-demo-001"></label>
+        <label>Amount (₹) <input id="payment-amount" type="number" min="1" step="0.01" value="125"></label>
+        <label class="toggle"><input id="simulation" type="checkbox" checked> Use simulator (turn off for real merchant phone)</label>
+        <p id="ble-status" class="hint">Simulator ready. No Bluetooth hardware needed.</p>
+        <div class="actions"><button id="connect-merchant" class="secondary">Connect merchant</button><button id="pay" disabled>Pay offline</button></div>
+      </section>
+      <section class="card"><div class="section-title"><h2>Transactions</h2><button id="sync-now" class="secondary small">Sync now</button></div><div id="transactions" class="transactions"><p class="hint">No transactions yet.</p></div></section>
+      <p id="notice" class="notice" aria-live="polite"></p>
+    </main>
+    <script src="./src/app.js"></script>
+  </body>
+</html>
