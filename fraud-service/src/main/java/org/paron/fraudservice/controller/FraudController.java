@@ -27,7 +27,11 @@ public class FraudController {
     public ResponseEntity<FraudCheckResponse> check(@Valid @RequestBody TransactionEvent transaction) {
         FraudAlertResponse alertResponse = fraudScoringService.evaluate(transaction);
 
-        String decision = alertResponse.isApproved() ? "APPROVE" : "REJECT";
+        // Surface the real three-state decision (APPROVE / HOLD_FOR_REVIEW / REJECT)
+        // so the sync-service can hold suspicious transactions instead of
+        // blindly rejecting them. Previously HOLD_FOR_REVIEW was collapsed
+        // into REJECT here, making the sync-service's hold branch dead code.
+        String decision = alertResponse.getDecision();
 
         List<String> triggered = alertResponse.getTriggeredRules();
         String reason = triggered.isEmpty() ? "NONE" : triggered.get(0);
@@ -36,6 +40,10 @@ public class FraudController {
                 .score(alertResponse.getScore())
                 .decision(decision)
                 .reason(reason)
+                .confidence(alertResponse.getConfidence())
+                .modelVersion(alertResponse.getModelVersion())
+                .policyVersion(alertResponse.getPolicyVersion())
+                .reasonCodes(alertResponse.getReasonCodes())
                 .build();
 
         return ResponseEntity.ok(response);
