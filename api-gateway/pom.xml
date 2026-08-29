@@ -46,6 +46,12 @@
             <artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
         </dependency>
 
+        <!-- Enables RedisRateLimiter, which backs the RequestRateLimiter routes. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
         <!-- JWT library - verifies user session JWTs (RS256) in AuthFilter -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

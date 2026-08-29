@@ -7,7 +7,7 @@ spring:
 
   # Same Supabase project as token-service, different tables (accounts, reservations)
   datasource:
-    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}?sslmode=require
+    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}?sslmode=require&connect_timeout=90&tcpKeepAlive=true
     username: ${SUPABASE_USER}
     password: ${SUPABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -24,6 +24,11 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+
+ledger:
+  # Hard per-user cap: total amount a single user may hold in ACTIVE
+  # reservations (offline tokens) at any one time.
+  max-active-reserved: 500.00
 
 management:
   endpoints:

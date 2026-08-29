@@ -5,6 +5,7 @@ import io.jsonwebtoken.JwtException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.paron.exception.ActiveTokenExsistsException;
+import org.paron.exception.TokenAlreadyUsedException;
 import org.paron.exception.TokenNotFoundException;
 import org.paron.model.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -165,6 +166,11 @@ public class TokenService {
     public void markAsUsed(@Valid MarkUsedRequest request) {
         TokenRecord record = tokenRepository.findByTokenValue(request.getToken())
                 .orElseThrow(() -> new TokenNotFoundException("Token not found for mark-used"));
+        // Idempotency guard — mark-used is one-time. The reservation is already
+        // settled the first time; a replay would fail ledger-side and surface as a 500.
+        if (record.getStatus() != TokenStatus.ACTIVE) {
+            throw new TokenAlreadyUsedException(record.getId().toString(), record.getStatus().name());
+        }
         record.setStatus(TokenStatus.USED);
         record.setSpentAmount(request.getFinalSpentAmount());
         record.setSettledAt(LocalDateTime.now());

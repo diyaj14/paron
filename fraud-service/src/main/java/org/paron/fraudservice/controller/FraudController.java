@@ -66,8 +66,8 @@ public class FraudController {
         return ResponseEntity.ok(alert);
     }
 
-    @PostMapping("/ping")
-    public String online(){
+    @RequestMapping(value = "/ping", method = {RequestMethod.GET, RequestMethod.POST})
+    public String online() {
         return "fraud check is active";
     }
 }

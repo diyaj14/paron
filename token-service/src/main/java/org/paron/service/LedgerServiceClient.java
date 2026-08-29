@@ -1,8 +1,11 @@
 package org.paron.service;
-import lombok.extern.slf4j.Slf4j;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;import lombok.extern.slf4j.Slf4j;
+import org.paron.exception.TokenException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
@@ -60,8 +63,34 @@ and plug that value in right here,
          has String keys and String values — it's trusting you. (Java cant identify
          type of map at runtime
          */
-        @SuppressWarnings("unchecked")
-        Map<String,String> response = restTemplate.postForObject(url,requestEntity,Map.class);
+        Map<String,String> response;
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String,String> raw = restTemplate.postForObject(url,requestEntity,Map.class);
+            response = raw;
+        } catch (HttpStatusCodeException e) {
+            // Ledger returned an error (e.g. INSUFFICIENT_FUNDS). Surface it as a
+            // proper business error instead of letting it bubble up as a 500.
+            String errorCode = "LEDGER_ERROR";
+            String message = "Ledger-service rejected the reservation (HTTP " + e.getStatusCode().value() + ")";
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                Map<String, Object> parsedBody = mapper.readValue(
+                        e.getResponseBodyAsString(),
+                        new TypeReference<Map<String, Object>>() {});
+                if (parsedBody != null) {
+                    if (parsedBody.get("errorCode") != null) {
+                        errorCode = String.valueOf(parsedBody.get("errorCode"));
+                    }
+                    if (parsedBody.get("message") != null) {
+                        message = String.valueOf(parsedBody.get("message"));
+                    }
+                }
+            } catch (Exception ignored) {
+                // Response body wasn't JSON; fall back to the defaults above
+            }
+            throw new TokenException(errorCode, message);
+        }
         if (response == null || !response.containsKey("reservationId")) {
             throw new RuntimeException("Invalid response from ledger-service during reserve");
         }
@@ -99,7 +128,31 @@ and plug that value in right here,
         log.info("Calling ledger-service to settle reservation. reservationId={}, spentAmount={}",
                 reservationId, spentAmount);
 
-        restTemplate.postForObject(url, requestEntity, Void.class);
+        try {
+            restTemplate.postForObject(url, requestEntity, Void.class);
+        } catch (HttpStatusCodeException e) {
+            // Ledger rejected the settlement (e.g. RESERVATION_ALREADY_CLOSED on replay).
+            // Surface it as a proper business error instead of a raw 500.
+            String errorCode = "LEDGER_ERROR";
+            String message = "Ledger-service rejected the settlement (HTTP " + e.getStatusCode().value() + ")";
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                Map<String, Object> parsedBody = mapper.readValue(
+                        e.getResponseBodyAsString(),
+                        new TypeReference<Map<String, Object>>() {});
+                if (parsedBody != null) {
+                    if (parsedBody.get("errorCode") != null) {
+                        errorCode = String.valueOf(parsedBody.get("errorCode"));
+                    }
+                    if (parsedBody.get("message") != null) {
+                        message = String.valueOf(parsedBody.get("message"));
+                    }
+                }
+            } catch (Exception ignored) {
+                // Response body wasn't JSON; fall back to the defaults above
+            }
+            throw new TokenException(errorCode, message);
+        }
     }
 
 
