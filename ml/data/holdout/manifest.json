@@ -32,5 +32,5 @@
     "token_age_known",
     "expiry_known"
   ],
-  "csv_path": "C:\\Users\\Diya Joshy\\paron\\ml\\data\\holdout\\features.csv"
+  "csv_path": "data\\holdout\\features.csv"
 }

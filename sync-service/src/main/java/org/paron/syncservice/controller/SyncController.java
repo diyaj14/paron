@@ -17,7 +17,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.paron.syncservice.dto.SyncRequest;
 import org.paron.syncservice.dto.SyncResponse;
+import org.paron.syncservice.dto.adjudicate.AdjudicateRequest;
+import org.paron.syncservice.dto.adjudicate.AdjudicationResponse;
 import org.paron.syncservice.model.OfflineTransaction;
+import org.paron.syncservice.service.DisputeAdjudicator;
 import org.paron.syncservice.service.SyncService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +36,7 @@ import java.util.List;
 public class SyncController {
 
     private final SyncService syncService;
+    private final DisputeAdjudicator disputeAdjudicator;
 
     /*queue to kafka for settling
      */
@@ -59,6 +63,18 @@ public class SyncController {
     @GetMapping("/ping")
     public ResponseEntity<String> ping() {
         return ResponseEntity.ok("sync-service is running");
+    }
+
+    /*
+     * The AI judge — resolve a dispute between two contradicting offline
+     * receipts. Deterministic ruling + auditable evidence + optional LLM
+     * narrative (see DisputeAdjudicator/DisputeReasoner).
+     */
+    @PostMapping("/adjudicate")
+    public ResponseEntity<AdjudicationResponse> adjudicate(
+            @Valid @RequestBody AdjudicateRequest request) {
+        log.info("Adjudication requested for {} receipt(s)", request.getDeviceTransactionIds().size());
+        return ResponseEntity.ok(disputeAdjudicator.adjudicate(request));
     }
 
 }

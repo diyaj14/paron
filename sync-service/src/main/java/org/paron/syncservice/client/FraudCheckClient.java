@@ -36,7 +36,7 @@ public class FraudCheckClient {
                 "amount", transaction.getAmount(),
                 "merchantId", transaction.getMerchantId() != null ? transaction.getMerchantId() : "",
                 "transactedAt", transaction.getTransactedAt() != null ? transaction.getTransactedAt().toString() : "",
-                "deviceId", "",
+                "deviceId", transaction.getDeviceId() != null ? transaction.getDeviceId() : "",
                 "tokenExpiryTime", ""
         );
 

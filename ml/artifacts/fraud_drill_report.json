@@ -1,0 +1,100 @@
+{
+  "drill": "fraud-drill-v1",
+  "mode": "offline",
+  "scenarios_total": 8,
+  "passed": 8,
+  "failed": 0,
+  "elapsed_ms": 1496.09,
+  "decision_policy": {
+    "any_rule_hit": "REJECT",
+    "approve_below": 0.35,
+    "reject_above": 0.75,
+    "min_confidence": 0.6
+  },
+  "results": [
+    {
+      "scenario": "NORMAL_PAYMENT",
+      "expected": "APPROVE",
+      "actual": "APPROVE",
+      "score": 0.1087,
+      "rule_hits": [],
+      "passed": true,
+      "notes": "Genuine small payment; nothing suspicious."
+    },
+    {
+      "scenario": "REPLAYED_TOKEN",
+      "expected": "REJECT",
+      "actual": "REJECT",
+      "score": 1.0,
+      "rule_hits": [
+        "TOKEN_REUSE",
+        "DUPLICATE_PAYLOAD"
+      ],
+      "passed": true,
+      "notes": "Same offline token spent again from another device \u2014 the signature & reuse rules should refuse it outright."
+    },
+    {
+      "scenario": "OVERSIZED_AMOUNT",
+      "expected": "REJECT",
+      "actual": "REJECT",
+      "score": 1.0,
+      "rule_hits": [
+        "AMOUNT_ANOMALY"
+      ],
+      "passed": true,
+      "notes": "Amount at 94% of the reserved cap with huge merchant deviation \u2014 a tampered receipt / overspend attempt."
+    },
+    {
+      "scenario": "TAMPERED_RECEIPT",
+      "expected": "REJECT",
+      "actual": "REJECT",
+      "score": 1.0,
+      "rule_hits": [
+        "AMOUNT_ANOMALY"
+      ],
+      "passed": true,
+      "notes": "Amount bumped well above the merchant normal after signing; crypto re-verification catches the forged canonical string too."
+    },
+    {
+      "scenario": "UNREGISTERED_DEVICE",
+      "expected": "HOLD",
+      "actual": "HOLD",
+      "score": 0.1082,
+      "rule_hits": [],
+      "passed": true,
+      "notes": "New device with zero history: fraud-service's low-signal guard (FraudScoringService) downgrades any would-be APPROVE to HOLD_FOR_REVIEW \u2014 a brand-new device never auto-approves."
+    },
+    {
+      "scenario": "DUPLICATE_PAYLOAD",
+      "expected": "REJECT",
+      "actual": "REJECT",
+      "score": 1.0,
+      "rule_hits": [
+        "TOKEN_REUSE",
+        "DUPLICATE_PAYLOAD"
+      ],
+      "passed": true,
+      "notes": "Identical payload seen before (replayed submission) \u2014 idempotency and duplicate rules refuse it."
+    },
+    {
+      "scenario": "VELOCITY_SPIKE",
+      "expected": "REJECT",
+      "actual": "REJECT",
+      "score": 1.0,
+      "rule_hits": [
+        "VELOCITY_BREACH"
+      ],
+      "passed": true,
+      "notes": "Dozens of payments in a few minutes \u2014 classic mule velocity."
+    },
+    {
+      "scenario": "LONG_OFFLINE_SYNC",
+      "expected": "REJECT",
+      "actual": "REJECT",
+      "score": 1.0,
+      "rule_hits": [],
+      "passed": true,
+      "notes": "Payment stayed offline past the token's working life and surfaced near expiry. The model scores this strongly (>= 0.75) and rejects \u2014 stricter than a mere hold, which is the safe call for long-offline."
+    }
+  ]
+}

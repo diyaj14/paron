@@ -37,3 +37,12 @@ set-env.ps1
 dev-keys/
 .implement
 implement
+
+### Python ###
+__pycache__/
+*.py[cod]
+
+### Gradle / Android build caches ###
+.gradle/
+**/.gradle/
+local.properties

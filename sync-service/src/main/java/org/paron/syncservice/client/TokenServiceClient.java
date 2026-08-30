@@ -4,6 +4,7 @@ package org.paron.syncservice.client;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.paron.syncservice.dto.TokenSpendState;
 import org.paron.syncservice.dto.TokenValidationResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -56,6 +57,16 @@ public class TokenServiceClient {
         log.info("Marking token as used. finalSpentAmount={}", finalSpentAmount);
 
         restTemplate.postForObject(url, requestEntity, Void.class);
+    }
+
+    /*
+     * Read-only spend-state evidence for the dispute arbiter ("AI judge").
+     * Throws on 4xx (unknown token) — callers decide how to handle it.
+     */
+    public TokenSpendState getSpendState(String token) {
+        String url = tokenServiceUrl + "/api/v1/tokens/state?token=" + token;
+        log.info("Fetching token spend state for dispute arbiter.");
+        return restTemplate.getForObject(url, TokenSpendState.class);
     }
 
 

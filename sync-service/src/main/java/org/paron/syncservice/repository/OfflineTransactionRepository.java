@@ -5,6 +5,7 @@ import org.paron.syncservice.model.TransactionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface OfflineTransactionRepository extends JpaRepository<OfflineTransaction, UUID> {
@@ -12,4 +13,7 @@ public interface OfflineTransactionRepository extends JpaRepository<OfflineTrans
     List<OfflineTransaction> findByUserIdOrderByReceivedAtDesc(String userId);
 
     List<OfflineTransaction> findByStatus(TransactionStatus status);
+
+    /* The dispute arbiter loads receipts by their device-generated id. */
+    Optional<OfflineTransaction> findByDeviceTransactionId(String deviceTransactionId);
 }

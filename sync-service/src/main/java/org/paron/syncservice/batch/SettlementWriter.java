@@ -58,6 +58,19 @@ public class SettlementWriter implements ItemWriter<SettlementContext> {
                 // ── Actually move the money ──────────────────────────────────
                 ledgerServiceClient.settle(context.getReservationID(), transaction.getAmount());
 
+                // ── Credit the merchant for this payment (best-effort) ───────
+                // The customer side has already settled; if this fails we log it
+                // instead of failing the whole transaction — the merchant can be
+                // reconciled manually.
+                if (transaction.getMerchantId() != null && !transaction.getMerchantId().isBlank()) {
+                    try {
+                        ledgerServiceClient.creditMerchant(transaction.getMerchantId(), transaction.getAmount());
+                    } catch (Exception creditEx) {
+                        log.error("Merchant credit failed after successful settle. merchantId={}, deviceTransactionId={}",
+                                transaction.getMerchantId(), transaction.getDeviceTransactionId(), creditEx);
+                    }
+                }
+
                 // ── Tell token-service this token is now spent ──────────────
                 // Separate try: if settle() succeeded but markAsUsed() fails,
                 // we MUST NOT retry settle() — that would double-debit.

@@ -53,6 +53,28 @@ public class FraudScoringService {
 
         DecisionResult decisionResult = decisionPolicy.decide(triggeredRules, modelOutput);
 
+        /*
+         * Low-signal guard ("a brand-new device never auto-approves").
+         * A user/device with zero 24h history carries too little information
+         * to approve on model confidence alone — surface it to an analyst for
+         * review instead. A hard rule hit still rejects; only a would-be
+         * APPROVE is downgraded to HOLD_FOR_REVIEW. Surfaces the exact
+         * unregistered-device gap the fraud drill flags.
+         */
+        boolean lowSignal = featureVector.historyAvailable() == null
+                || featureVector.historyAvailable() == 0;
+        if (lowSignal && decisionResult.getDecision() == DecisionType.APPROVE) {
+            decisionResult = DecisionResult.builder()
+                    .decision(DecisionType.HOLD_FOR_REVIEW)
+                    .reason("low_information_new_device")
+                    .triggeredRules(decisionResult.getTriggeredRules())
+                    .score(decisionResult.getScore())
+                    .confidence(decisionResult.getConfidence())
+                    .build();
+            log.info("fraud low-signal guard userId={}, APPROVE downgraded to HOLD_FOR_REVIEW",
+                    event.getUserId());
+        }
+
         boolean approved = decisionResult.getDecision() == DecisionType.APPROVE;
         double clampedScore = Math.min(totalScore, 1.0);
         RiskLevel riskLevel = mapRiskLevel(clampedScore);

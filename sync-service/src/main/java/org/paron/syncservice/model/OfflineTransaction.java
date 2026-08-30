@@ -59,6 +59,22 @@ public class OfflineTransaction {
     @Column(name = "merchant_id")
     private String merchantId;
 
+    // The phone's stable device identifier — feeds the fraud-service
+    // TOKEN_REUSE rule so the same token spent from a second device is
+    // flagged instead of silently passing.
+    @Column(name = "device_id")
+    private String deviceId;
+
+    // Signed-receipt evidence (Step 0b): the device's ECDSA signature over
+    // the canonical transaction, plus the JWK public key it verifies with.
+    // Persisted so fraud review and the dispute arbiter can re-check
+    // authenticity later instead of trusting the stored row blindly.
+    @Column(name = "signature", columnDefinition = "TEXT")
+    private String signature;
+
+    @Column(name = "public_key", columnDefinition = "TEXT")
+    private String publicKey;
+
     // When the payment actually happened offline (set by the device clock,
     // NOT when it reached our server — important for fraud time-pattern checks)
     @Column(name = "transacted_at", nullable = false)

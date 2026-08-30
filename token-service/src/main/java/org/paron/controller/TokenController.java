@@ -55,6 +55,13 @@ public class TokenController {
         return ResponseEntity.ok(response);
     }
 
+    /*Read-only spend state — the authoritative "how much spent?" evidence
+    the dispute arbiter consumes to rule on conflicting receipts.*/
+    @GetMapping("/state")
+    public ResponseEntity<TokenSpendState> spendState(@RequestParam String token) {
+        return ResponseEntity.ok(tokenService.getSpendState(token));
+    }
+
 
     /*Health check*/
     @GetMapping("/ping")

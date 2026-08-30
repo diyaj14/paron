@@ -53,7 +53,9 @@ public class MainActivity extends Activity {
     private final Map<String, FrameBuffer> buffers = new HashMap<>();
     private TextView status;
     private TextView receiptLog;
+    private TextView balanceLabel;
     private EditText merchantIdInput;
+    private EditText apiBaseInput;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -69,6 +71,9 @@ public class MainActivity extends Activity {
         TextView title = new TextView(this); title.setText("Paron Merchant Receiver"); title.setTextSize(24); root.addView(title);
         status = new TextView(this); status.setText("Receiver stopped"); status.setPadding(0, 24, 0, 16); root.addView(status);
         merchantIdInput = new EditText(this); merchantIdInput.setHint("Merchant ID"); merchantIdInput.setText("merchant-demo-001"); root.addView(merchantIdInput, new LinearLayout.LayoutParams(-1, -2));
+        apiBaseInput = new EditText(this); apiBaseInput.setHint("API base URL (e.g. http://192.168.1.10:8080)"); root.addView(apiBaseInput, new LinearLayout.LayoutParams(-1, -2));
+        Button refresh = new Button(this); refresh.setText("Register & check balance (online)"); refresh.setOnClickListener(v -> refreshMerchantBalance()); root.addView(refresh);
+        balanceLabel = new TextView(this); balanceLabel.setText("Merchant balance unavailable while offline."); balanceLabel.setPadding(0, 8, 0, 16); root.addView(balanceLabel);
         Button start = new Button(this); start.setText("Start Bluetooth receiver"); start.setOnClickListener(v -> requestPermissionsThenStart()); root.addView(start);
         Button stop = new Button(this); stop.setText("Stop receiver"); stop.setOnClickListener(v -> stopReceiver()); root.addView(stop);
         receiptLog = new TextView(this); receiptLog.setText("No payment received yet."); receiptLog.setPadding(0, 30, 0, 0); root.addView(receiptLog);
@@ -104,6 +109,46 @@ public class MainActivity extends Activity {
     private void stopReceiver() { if (advertiser != null) advertiser.stopAdvertising(advertiseCallback); advertiser = null; if (gattServer != null) gattServer.close(); gattServer = null; buffers.clear(); setStatus("Receiver stopped"); }
     @Override protected void onDestroy() { stopReceiver(); super.onDestroy(); }
     private void setStatus(String value) { status.setText(value); }
+    private void setBalance(String value) { balanceLabel.setText(value); }
+
+    /*
+     * Registers this merchant (idempotent) and loads its collected balance
+     * from the backend, so the merchant phone reflects real settled money.
+     * Runs on a background thread — network on the UI thread is forbidden.
+     */
+    private void refreshMerchantBalance() {
+        final String base = apiBaseInput.getText().toString().trim().replaceAll("/+$", "");
+        final String merchantId = merchantIdInput.getText().toString().trim();
+        if (base.isEmpty() || merchantId.isEmpty()) { setBalance("Enter API base URL and merchant ID first."); return; }
+        new Thread(() -> {
+            try {
+                java.net.HttpURLConnection reg = (java.net.HttpURLConnection) new java.net.URL(base + "/api/v1/ledger/merchants/register").openConnection();
+                reg.setRequestMethod("POST");
+                reg.setRequestProperty("Content-Type", "application/json");
+                reg.setDoOutput(true);
+                reg.getOutputStream().write(("{\"merchantId\":\"" + merchantId + "\"}").getBytes(StandardCharsets.UTF_8));
+                int registerStatus = reg.getResponseCode();
+                reg.disconnect();
+
+                java.net.HttpURLConnection bal = (java.net.HttpURLConnection) new java.net.URL(base + "/api/v1/ledger/merchants/" + merchantId).openConnection();
+                bal.setRequestMethod("GET");
+                int balanceStatus = bal.getResponseCode();
+                if (balanceStatus != 200) { bal.disconnect(); runOnUiThread(() -> setBalance("Balance lookup failed (HTTP " + balanceStatus + ")")); return; }
+                java.io.InputStream stream = bal.getInputStream();
+                java.util.Scanner scanner = new java.util.Scanner(stream, "UTF-8").useDelimiter("\\A");
+                String body = scanner.hasNext() ? scanner.next() : "";
+                scanner.close();
+                bal.disconnect();
+                JSONObject json = new JSONObject(body);
+                final double collected = json.optDouble("collectedBalance", 0);
+                final String name = json.optString("merchantName", merchantId);
+                final int regCode = registerStatus;
+                runOnUiThread(() -> setBalance(name + (regCode == 200 ? " (registered)" : " (registered now)") + " · collected ₹" + String.format("%.2f", collected)));
+            } catch (Exception e) {
+                runOnUiThread(() -> setBalance("Backend unreachable: " + e.getMessage()));
+            }
+        }).start();
+    }
     private final AdvertiseCallback advertiseCallback = new AdvertiseCallback() { @Override public void onStartFailure(int errorCode) { setStatus("Could not advertise (error " + errorCode + ")."); } };
 
     private final BluetoothGattServerCallback gattCallback = new BluetoothGattServerCallback() {

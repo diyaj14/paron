@@ -112,8 +112,45 @@ spring:
                 redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
 
+        # ── Token issuance — user-facing, routed (the PWA calls it) ─────────
+        - id: token-issue
+          uri: ${TOKEN_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/tokens/gettoken
+            - Method=POST
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 30
+                redis-rate-limiter.requestedTokens: 1
+
+        # ── Dev-only: create a test ledger account through the gateway ───────
+        - id: ledger-create-account
+          uri: ${LEDGER_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/ledger/accounts/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 10
+                redis-rate-limiter.requestedTokens: 1
+
+        # ── Merchant ledger — register, check collected balance, credit ──────
+        - id: merchant-ledger
+          uri: ${LEDGER_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/ledger/merchants/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 30
+                redis-rate-limiter.requestedTokens: 1
+
         # ── Internal-only endpoints: intentionally NOT routed ───────────────
-        # POST /api/v1/tokens/gettoken, /validateToken, /mark-used
+        # POST /api/v1/tokens/validateToken, /mark-used
         # POST /api/v1/ledger/reserve, /release, /settle
         # POST /api/v1/fraud/check
         # No route defined => gateway returns 404 to external callers.
@@ -172,7 +209,7 @@ spring:
       server.webflux.globalcors:
         cors-configurations:
           '[/**]':
-            allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+            allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
             allowed-methods: GET,POST,PUT,DELETE
             allowed-headers: Authorization,Content-Type,X-Requested-With
             exposed-headers: X-User-Id

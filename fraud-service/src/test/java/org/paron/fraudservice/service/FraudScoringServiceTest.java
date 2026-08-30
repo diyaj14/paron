@@ -142,4 +142,44 @@ class FraudScoringServiceTest {
         FraudAlertResponse result = service.evaluate(event);
         assertEquals("txn-999", result.getTransactionId());
     }
+
+    @Test
+    void lowSignalNewDevice_downgradesApproveToHold() {
+        // historyAvailable == 0 -> a brand-new user/device must never
+        // auto-approve, even though the policy would otherwise APPROVE.
+        RiskFeatureVector noHistory = new RiskFeatureVector(
+                "v1", 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0.0, 0, 0, 0, 0, 0
+        );
+        when(featureBuilder.build(any())).thenReturn(noHistory);
+        when(decisionPolicy.decide(eq(List.of()), any()))
+                .thenReturn(DecisionResult.builder().decision(DecisionType.APPROVE).reason("score_below_threshold").build());
+
+        FraudScoringService service = buildService(Collections.emptyList());
+        FraudAlertResponse result = service.evaluate(buildEvent());
+
+        assertFalse(result.isApproved());
+        assertEquals(DecisionType.HOLD_FOR_REVIEW.name(), result.getDecision());
+    }
+
+    @Test
+    void lowSignalNewDevice_stillRejectsOnHardRule() {
+        // Low signal must never downgrade a genuine hard-rule rejection —
+        // a replayed token stays a rejection regardless of history.
+        RiskFeatureVector noHistory = new RiskFeatureVector(
+                "v1", 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0.0, 0, 0, 0, 0, 0
+        );
+        when(featureBuilder.build(any())).thenReturn(noHistory);
+        when(decisionPolicy.decide(eq(List.of("HIGH_RULE")), any()))
+                .thenReturn(DecisionResult.builder().decision(DecisionType.REJECT).reason("hard_rule_hit").build());
+
+        FraudRule highRule = mock(FraudRule.class);
+        when(highRule.evaluate(any())).thenReturn(0.8);
+        when(highRule.name()).thenReturn("HIGH_RULE");
+
+        FraudScoringService service = buildService(List.of(highRule));
+        FraudAlertResponse result = service.evaluate(buildEvent());
+
+        assertEquals(DecisionType.REJECT.name(), result.getDecision());
+        assertFalse(result.isApproved());
+    }
 }

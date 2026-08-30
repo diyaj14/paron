@@ -47,6 +47,9 @@ public class TransactionConsumer {
                 .offlineToken(dto.getOfflineToken())
                 .amount(dto.getAmount())
                 .merchantId(dto.getMerchantId())
+                .deviceId(dto.getDeviceId())
+                .signature(dto.getSignature())
+                .publicKey(dto.getPublicKey())
                 .transactedAt(dto.getTransactedAt())
                 .status(TransactionStatus.RECEIVED)
                 .build();

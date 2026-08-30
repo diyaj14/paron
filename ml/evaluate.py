@@ -249,7 +249,10 @@ def main():
     for lim in evidence["limitations"]:
         md_lines.append(f"- {lim}")
 
-    reports_dir = Path("docs/reports")
+    # Reports always land in the repo-root docs/reports/ so the buildathon
+    # bundle is consistent no matter where the script is invoked from.
+    repo_root = Path(__file__).resolve().parents[1]
+    reports_dir = repo_root / "docs" / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     with open(reports_dir / "phase2-evaluation.md", "w") as f:
         f.write("\n".join(md_lines) + "\n")
