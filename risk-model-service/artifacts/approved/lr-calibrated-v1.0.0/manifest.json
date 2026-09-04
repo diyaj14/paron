@@ -3,12 +3,12 @@
   "feature_schema_version": "v1",
   "threshold_policy_version": "thresholds-v1",
   "seed": 42,
-  "total_records": 10000,
-  "train_count": 6000,
-  "val_count": 2000,
-  "test_count": 2000,
-  "threshold": 0.53,
-  "test_pr_auc": 0.6596,
-  "baseline_pr_auc": 0.4292,
-  "improvement_over_baseline": 0.2304
+  "total_records": 12000,
+  "train_count": 7200,
+  "val_count": 2400,
+  "test_count": 2400,
+  "threshold": 0.37,
+  "test_pr_auc": 0.691,
+  "baseline_pr_auc": 0.4574,
+  "improvement_over_baseline": 0.2336
 }

@@ -30,6 +30,14 @@
         <div class="actions"><button id="connect-merchant" class="secondary">Connect merchant</button><button id="pay" disabled>Pay offline</button></div>
       </section>
       <section class="card"><div class="section-title"><h2>Transactions</h2><button id="sync-now" class="secondary small">Sync now</button></div><div id="transactions" class="transactions"><p class="hint">No transactions yet.</p></div></section>
+      <section class="card">
+        <h2>Resolve dispute (AI Judge)</h2>
+        <p class="hint">Two receipts below argue over the same payment. The arbiter re-verifies each signature, checks the token spend state, and hands down a deterministic, auditable verdict.</p>
+        <label>Device txn A <input id="dispute-txn-a" placeholder="device transaction id"></label>
+        <label>Device txn B <input id="dispute-txn-b" placeholder="device transaction id"></label>
+        <div class="actions"><button id="resolve-dispute" class="secondary">Resolve dispute</button></div>
+        <div id="dispute-result" class="dispute-result"></div>
+      </section>
       <section class="card"><div class="section-title"><h2>Token history</h2></div><div id="token-history" class="transactions"><p class="hint">No tokens issued yet.</p></div></section>
       <p id="notice" class="notice" aria-live="polite"></p>
     </main>

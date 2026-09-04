@@ -1,80 +1,187 @@
 {
   "model_version": "lr-calibrated-v1.0.0",
   "feature_schema_version": "v1",
-  "holdout_count": 1000,
-  "threshold": 0.53,
+  "holdout_count": 2000,
+  "threshold": 0.37,
   "ai_model": {
-    "threshold": 0.53,
-    "precision": 1.0,
-    "recall": 0.46,
-    "f1": 0.6301,
-    "pr_auc": 0.613,
-    "roc_auc": 0.727,
+    "threshold": 0.37,
+    "precision": 0.9784,
+    "recall": 0.5675,
+    "f1": 0.7184,
+    "pr_auc": 0.7089,
+    "roc_auc": 0.797,
     "confusion_matrix": {
-      "tn": 800,
-      "fp": 0,
-      "fn": 108,
-      "tp": 92
+      "tn": 1595,
+      "fp": 5,
+      "fn": 173,
+      "tp": 227
     },
-    "false_positive_rupee_cost": 0.0,
-    "sample_count": 1000,
+    "false_positive_rupee_cost": 2500.0,
+    "sample_count": 2000,
     "fraud_prevalence": 0.2,
     "cost_per_false_positive_inr": 500.0
   },
   "rules_baseline": {
     "threshold": 0.7,
-    "precision": 0.5778,
-    "recall": 0.39,
-    "f1": 0.4657,
-    "pr_auc": 0.3854,
+    "precision": 0.6024,
+    "recall": 0.5075,
+    "f1": 0.5509,
+    "pr_auc": 0.4449,
     "confusion_matrix": {
-      "tn": 743,
-      "fp": 57,
-      "fn": 122,
-      "tp": 78
+      "tn": 1466,
+      "fp": 134,
+      "fn": 197,
+      "tp": 203
     },
-    "false_positive_rupee_cost": 28500.0,
-    "sample_count": 1000
+    "false_positive_rupee_cost": 67000.0,
+    "sample_count": 2000
+  },
+  "production_decision": {
+    "approve_below": 0.15,
+    "reject_above": 0.75,
+    "min_confidence": 0.6,
+    "fraud_caught_recall": 0.6425,
+    "fraud_slip_through": 0.3575,
+    "legit_approved_precision": 0.8094,
+    "legit_held": 0.1062,
+    "legit_rejected": 0.0844,
+    "decision_counts": {
+      "approve": 1438,
+      "hold": 187,
+      "reject": 375
+    }
   },
   "improvement": {
-    "pr_auc_delta": 0.2276,
-    "fp_cost_reduction_inr": 28500.0
+    "pr_auc_delta": 0.264,
+    "fp_cost_reduction_inr": 64500.0
   },
   "latency": {
-    "mean_ms": 4.11,
-    "p50_ms": 3.86,
-    "p95_ms": 5.04,
-    "p99_ms": 5.26,
+    "mean_ms": 3.73,
+    "p50_ms": 3.74,
+    "p95_ms": 4.9,
+    "p99_ms": 5.08,
     "n_runs": 5,
-    "batch_size": 1000
+    "batch_size": 2000
   },
   "sample_predictions": [
     {
       "index": 0,
       "actual_label": 0,
       "predicted_label": 0,
-      "score": 0.1082,
+      "score": 0.1003,
       "features": {
-        "amount": 58.0782,
-        "amount_to_token_limit_ratio": 0.0116,
-        "merchant_amount_deviation": 0.431,
+        "amount": 407.5162,
+        "amount_to_token_limit_ratio": 0.0815,
+        "merchant_amount_deviation": 0.4374,
         "user_tx_count_5m": 0.0,
-        "user_tx_count_1h": 2.0,
+        "user_tx_count_1h": 1.0,
         "user_tx_count_24h": 7.0,
         "device_tx_count_5m": 0.0,
-        "device_tx_count_1h": 2.0,
-        "device_tx_count_24h": 2.0,
+        "device_tx_count_1h": 1.0,
+        "device_tx_count_24h": 8.0,
         "token_tx_count_24h": 0.0,
-        "user_tx_value_1h": 340.3214,
-        "device_tx_value_24h": 510.3475,
-        "token_age_seconds": 7345.076,
-        "time_to_expiry_seconds": 4425.5941,
-        "offline_duration_seconds": 4.4453,
+        "user_tx_value_1h": 441.1413,
+        "device_tx_value_24h": 2761.21,
+        "token_age_seconds": 11711.4374,
+        "time_to_expiry_seconds": 9311.5726,
+        "offline_duration_seconds": 323.9532,
+        "token_reuse_count": 0.0,
+        "duplicate_payload_hash_count": 0.0,
+        "previous_settlement_failed": 0.0,
+        "merchant_risk_aggregate": 0.0507,
+        "hour_of_day": 5.0,
+        "day_of_week": 3.0,
+        "history_available": 1.0,
+        "token_age_known": 1.0,
+        "expiry_known": 1.0
+      },
+      "contributions": [
+        {
+          "feature": "token_age_seconds",
+          "value": 11711.4374
+        },
+        {
+          "feature": "time_to_expiry_seconds",
+          "value": 9311.5726
+        },
+        {
+          "feature": "device_tx_value_24h",
+          "value": 2761.21
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "actual_label": 0,
+      "predicted_label": 0,
+      "score": 0.0606,
+      "features": {
+        "amount": 138.5354,
+        "amount_to_token_limit_ratio": 0.0277,
+        "merchant_amount_deviation": 0.1154,
+        "user_tx_count_5m": 0.0,
+        "user_tx_count_1h": 3.0,
+        "user_tx_count_24h": 10.0,
+        "device_tx_count_5m": 0.0,
+        "device_tx_count_1h": 2.0,
+        "device_tx_count_24h": 4.0,
+        "token_tx_count_24h": 1.0,
+        "user_tx_value_1h": 391.1851,
+        "device_tx_value_24h": 278.576,
+        "token_age_seconds": 5640.0916,
+        "time_to_expiry_seconds": 17805.2054,
+        "offline_duration_seconds": 257.3497,
         "token_reuse_count": 0.0,
         "duplicate_payload_hash_count": 0.0,
         "previous_settlement_failed": 1.0,
-        "merchant_risk_aggregate": 0.0754,
+        "merchant_risk_aggregate": 0.0374,
         "hour_of_day": 22.0,
+        "day_of_week": 2.0,
+        "history_available": 1.0,
+        "token_age_known": 1.0,
+        "expiry_known": 0.0
+      },
+      "contributions": [
+        {
+          "feature": "time_to_expiry_seconds",
+          "value": 17805.2054
+        },
+        {
+          "feature": "token_age_seconds",
+          "value": 5640.0916
+        },
+        {
+          "feature": "user_tx_value_1h",
+          "value": 391.1851
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "actual_label": 0,
+      "predicted_label": 0,
+      "score": 0.1003,
+      "features": {
+        "amount": 125.1474,
+        "amount_to_token_limit_ratio": 0.025,
+        "merchant_amount_deviation": 0.065,
+        "user_tx_count_5m": 2.0,
+        "user_tx_count_1h": 4.0,
+        "user_tx_count_24h": 9.0,
+        "device_tx_count_5m": 0.0,
+        "device_tx_count_1h": 3.0,
+        "device_tx_count_24h": 6.0,
+        "token_tx_count_24h": 4.0,
+        "user_tx_value_1h": 993.4802,
+        "device_tx_value_24h": 858.3437,
+        "token_age_seconds": 14953.0653,
+        "time_to_expiry_seconds": 10345.726,
+        "offline_duration_seconds": 13.6415,
+        "token_reuse_count": 0.0,
+        "duplicate_payload_hash_count": 0.0,
+        "previous_settlement_failed": 0.0,
+        "merchant_risk_aggregate": 0.1704,
+        "hour_of_day": 0.0,
         "day_of_week": 6.0,
         "history_available": 1.0,
         "token_age_known": 1.0,
@@ -83,44 +190,90 @@
       "contributions": [
         {
           "feature": "token_age_seconds",
-          "value": 7345.076
+          "value": 14953.0653
         },
         {
           "feature": "time_to_expiry_seconds",
-          "value": 4425.5941
+          "value": 10345.726
         },
         {
-          "feature": "device_tx_value_24h",
-          "value": 510.3475
+          "feature": "user_tx_value_1h",
+          "value": 993.4802
         }
       ]
     },
     {
-      "index": 1,
-      "actual_label": 0,
+      "index": 3,
+      "actual_label": 1,
       "predicted_label": 0,
-      "score": 0.1087,
+      "score": 0.0988,
       "features": {
-        "amount": 423.404,
-        "amount_to_token_limit_ratio": 0.0847,
-        "merchant_amount_deviation": 0.1423,
+        "amount": 1051.1153,
+        "amount_to_token_limit_ratio": 0.2102,
+        "merchant_amount_deviation": 0.0205,
         "user_tx_count_5m": 0.0,
-        "user_tx_count_1h": 2.0,
-        "user_tx_count_24h": 6.0,
-        "device_tx_count_5m": 0.0,
-        "device_tx_count_1h": 0.0,
-        "device_tx_count_24h": 8.0,
-        "token_tx_count_24h": 0.0,
-        "user_tx_value_1h": 1102.7861,
-        "device_tx_value_24h": 381.8928,
-        "token_age_seconds": 5607.1513,
-        "time_to_expiry_seconds": 10336.0442,
-        "offline_duration_seconds": 3.0046,
+        "user_tx_count_1h": 3.0,
+        "user_tx_count_24h": 8.0,
+        "device_tx_count_5m": 2.0,
+        "device_tx_count_1h": 3.0,
+        "device_tx_count_24h": 2.0,
+        "token_tx_count_24h": 2.0,
+        "user_tx_value_1h": 3053.2384,
+        "device_tx_value_24h": 107.4414,
+        "token_age_seconds": 9445.5747,
+        "time_to_expiry_seconds": 9431.3355,
+        "offline_duration_seconds": 316.2588,
         "token_reuse_count": 0.0,
         "duplicate_payload_hash_count": 0.0,
         "previous_settlement_failed": 0.0,
-        "merchant_risk_aggregate": 0.1979,
-        "hour_of_day": 13.0,
+        "merchant_risk_aggregate": 0.0437,
+        "hour_of_day": 10.0,
+        "day_of_week": 0.0,
+        "history_available": 1.0,
+        "token_age_known": 1.0,
+        "expiry_known": 1.0
+      },
+      "contributions": [
+        {
+          "feature": "token_age_seconds",
+          "value": 9445.5747
+        },
+        {
+          "feature": "time_to_expiry_seconds",
+          "value": 9431.3355
+        },
+        {
+          "feature": "user_tx_value_1h",
+          "value": 3053.2384
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "actual_label": 1,
+      "predicted_label": 1,
+      "score": 1.0,
+      "features": {
+        "amount": 2455.9635,
+        "amount_to_token_limit_ratio": 0.6929,
+        "merchant_amount_deviation": 0.2389,
+        "user_tx_count_5m": 2.0,
+        "user_tx_count_1h": 3.0,
+        "user_tx_count_24h": 14.0,
+        "device_tx_count_5m": 1.0,
+        "device_tx_count_1h": 2.0,
+        "device_tx_count_24h": 8.0,
+        "token_tx_count_24h": 1.0,
+        "user_tx_value_1h": 887.2398,
+        "device_tx_value_24h": 2266.0961,
+        "token_age_seconds": 19034.5942,
+        "time_to_expiry_seconds": 944.2667,
+        "offline_duration_seconds": 85331.3085,
+        "token_reuse_count": 0.0,
+        "duplicate_payload_hash_count": 0.0,
+        "previous_settlement_failed": 1.0,
+        "merchant_risk_aggregate": 0.0931,
+        "hour_of_day": 5.0,
         "day_of_week": 2.0,
         "history_available": 1.0,
         "token_age_known": 1.0,
@@ -128,154 +281,16 @@
       },
       "contributions": [
         {
-          "feature": "time_to_expiry_seconds",
-          "value": 10336.0442
+          "feature": "offline_duration_seconds",
+          "value": 85331.3085
         },
         {
           "feature": "token_age_seconds",
-          "value": 5607.1513
-        },
-        {
-          "feature": "user_tx_value_1h",
-          "value": 1102.7861
-        }
-      ]
-    },
-    {
-      "index": 2,
-      "actual_label": 0,
-      "predicted_label": 0,
-      "score": 0.1087,
-      "features": {
-        "amount": 150.6593,
-        "amount_to_token_limit_ratio": 0.0301,
-        "merchant_amount_deviation": 0.013,
-        "user_tx_count_5m": 0.0,
-        "user_tx_count_1h": 3.0,
-        "user_tx_count_24h": 7.0,
-        "device_tx_count_5m": 1.0,
-        "device_tx_count_1h": 1.0,
-        "device_tx_count_24h": 4.0,
-        "token_tx_count_24h": 1.0,
-        "user_tx_value_1h": 232.5888,
-        "device_tx_value_24h": 681.782,
-        "token_age_seconds": 15760.0406,
-        "time_to_expiry_seconds": 14274.3528,
-        "offline_duration_seconds": 290.4598,
-        "token_reuse_count": 0.0,
-        "duplicate_payload_hash_count": 0.0,
-        "previous_settlement_failed": 0.0,
-        "merchant_risk_aggregate": 0.0746,
-        "hour_of_day": 15.0,
-        "day_of_week": 4.0,
-        "history_available": 1.0,
-        "token_age_known": 1.0,
-        "expiry_known": 1.0
-      },
-      "contributions": [
-        {
-          "feature": "token_age_seconds",
-          "value": 15760.0406
-        },
-        {
-          "feature": "time_to_expiry_seconds",
-          "value": 14274.3528
-        },
-        {
-          "feature": "device_tx_value_24h",
-          "value": 681.782
-        }
-      ]
-    },
-    {
-      "index": 3,
-      "actual_label": 0,
-      "predicted_label": 0,
-      "score": 0.1087,
-      "features": {
-        "amount": 525.3411,
-        "amount_to_token_limit_ratio": 0.1051,
-        "merchant_amount_deviation": 0.1375,
-        "user_tx_count_5m": 0.0,
-        "user_tx_count_1h": 2.0,
-        "user_tx_count_24h": 9.0,
-        "device_tx_count_5m": 0.0,
-        "device_tx_count_1h": 0.0,
-        "device_tx_count_24h": 6.0,
-        "token_tx_count_24h": 2.0,
-        "user_tx_value_1h": 125.5166,
-        "device_tx_value_24h": 2072.8485,
-        "token_age_seconds": 15838.4055,
-        "time_to_expiry_seconds": 9836.5484,
-        "offline_duration_seconds": 50.5366,
-        "token_reuse_count": 0.0,
-        "duplicate_payload_hash_count": 0.0,
-        "previous_settlement_failed": 1.0,
-        "merchant_risk_aggregate": 0.0089,
-        "hour_of_day": 7.0,
-        "day_of_week": 4.0,
-        "history_available": 0.0,
-        "token_age_known": 1.0,
-        "expiry_known": 1.0
-      },
-      "contributions": [
-        {
-          "feature": "token_age_seconds",
-          "value": 15838.4055
-        },
-        {
-          "feature": "time_to_expiry_seconds",
-          "value": 9836.5484
-        },
-        {
-          "feature": "device_tx_value_24h",
-          "value": 2072.8485
-        }
-      ]
-    },
-    {
-      "index": 4,
-      "actual_label": 0,
-      "predicted_label": 0,
-      "score": 0.1087,
-      "features": {
-        "amount": 1114.1237,
-        "amount_to_token_limit_ratio": 0.2228,
-        "merchant_amount_deviation": 0.0784,
-        "user_tx_count_5m": 2.0,
-        "user_tx_count_1h": 3.0,
-        "user_tx_count_24h": 9.0,
-        "device_tx_count_5m": 0.0,
-        "device_tx_count_1h": 2.0,
-        "device_tx_count_24h": 2.0,
-        "token_tx_count_24h": 1.0,
-        "user_tx_value_1h": 580.9688,
-        "device_tx_value_24h": 900.0689,
-        "token_age_seconds": 10107.3001,
-        "time_to_expiry_seconds": 10364.3122,
-        "offline_duration_seconds": 200.3446,
-        "token_reuse_count": 0.0,
-        "duplicate_payload_hash_count": 0.0,
-        "previous_settlement_failed": 0.0,
-        "merchant_risk_aggregate": 0.1349,
-        "hour_of_day": 10.0,
-        "day_of_week": 5.0,
-        "history_available": 0.0,
-        "token_age_known": 1.0,
-        "expiry_known": 1.0
-      },
-      "contributions": [
-        {
-          "feature": "time_to_expiry_seconds",
-          "value": 10364.3122
-        },
-        {
-          "feature": "token_age_seconds",
-          "value": 10107.3001
+          "value": 19034.5942
         },
         {
           "feature": "amount",
-          "value": 1114.1237
+          "value": 2455.9635
         }
       ]
     }

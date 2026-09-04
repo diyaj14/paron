@@ -189,6 +189,44 @@ def inject_subtle_fraud(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFr
     return df
 
 
+def inject_fraud_signature_tamper(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
+    """Forged / tampered receipt: amount altered after signing.
+
+    The amount the merchant saw differs wildly from what was signed — the
+    crypto re-verification fails. These receipts look *almost* normal (single
+    token, low velocity) except for a suspicious amount/merchant pattern, which
+    is exactly what a signature-tamper attack hides behind.
+    """
+    mask = rng.random(len(df)) < 0.08
+    n = mask.sum()
+    df.loc[mask, "amount"] = rng.uniform(3000, 4900, size=n)
+    df.loc[mask, "amount_to_token_limit_ratio"] = rng.uniform(0.6, 0.98, size=n)
+    df.loc[mask, "merchant_amount_deviation"] = rng.uniform(5.0, 12.0, size=n)
+    df.loc[mask, "merchant_risk_aggregate"] = rng.uniform(0.4, 0.85, size=n)
+    df.loc[mask, "time_to_expiry_seconds"] = rng.uniform(2000, 12000, size=n)
+    return df
+
+
+def inject_fraud_cross_device_clean(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
+    """Same token spent from a different device, amounts kept under the cap.
+
+    The subtle double-spend: each individual payment looks legitimate and stays
+    under the display cap, but the same token is being replayed cross-device —
+    the kind of slow fraud the loud rules miss and only cumulative spend-state
+    or the model's learned cross-device signal can catch.
+    """
+    mask = rng.random(len(df)) < 0.10
+    n = mask.sum()
+    df.loc[mask, "token_reuse_count"] = rng.poisson(2, size=n).clip(1, 6)
+    df.loc[mask, "token_tx_count_24h"] = df.loc[mask, "token_reuse_count"] + rng.integers(1, 4)
+    df.loc[mask, "amount"] = rng.uniform(300, 1500, size=n)
+    df.loc[mask, "amount_to_token_limit_ratio"] = rng.uniform(0.06, 0.3, size=n)
+    df.loc[mask, "merchant_amount_deviation"] = rng.uniform(0.5, 2.0, size=n)
+    df.loc[mask, "history_available"] = rng.choice([0, 1], size=n, p=[0.3, 0.7])
+    df.loc[mask, "previous_settlement_failed"] = rng.choice([0, 1], size=n, p=[0.5, 0.5])
+    return df
+
+
 def generate(n: int, rng: np.random.Generator) -> pd.DataFrame:
     n_legit = int(n * 0.80)
     n_fraud = n - n_legit
@@ -204,6 +242,8 @@ def generate(n: int, rng: np.random.Generator) -> pd.DataFrame:
     fraud = inject_fraud_long_offline(fraud, rng)
     fraud = inject_fraud_duplicate_payload(fraud, rng)
     fraud = inject_subtle_fraud(fraud, rng)
+    fraud = inject_fraud_signature_tamper(fraud, rng)
+    fraud = inject_fraud_cross_device_clean(fraud, rng)
     fraud["label"] = 1
 
     df = pd.concat([legit, fraud], ignore_index=True)

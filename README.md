@@ -153,18 +153,28 @@ The model is a **calibrated logistic regression** on a v1 feature schema (amount
 
 | Metric | AI model | Rules baseline | Delta |
 |---|---|---|---|
-| Precision | 1.00 | 0.578 | +0.42 |
-| Recall | 0.46 | 0.39 | +0.07 |
-| F1 | 0.630 | 0.466 | +0.16 |
-| **PR-AUC** | **0.613** | **0.385** | **+0.23** |
-| **FP cost (₹500/FP)** | **₹0** | **₹28,500** | **−₹28,500** |
+| Precision | 0.978 | 0.602 | +0.38 |
+| Recall | 0.568 | 0.508 | +0.06 |
+| F1 | 0.718 | 0.551 | +0.17 |
+| **PR-AUC** | **0.709** | **0.445** | **+0.26** |
+| **FP cost (₹500/FP)** | **₹2,500** | **₹67,000** | **−₹64,500** |
+
+The isolated classifier is a sanity check; **what matters operationally is the 3-state decision** (APPROVE / HOLD / REJECT) that the full rules + model + low-signal-guard path makes on each txn. On the same holdout, **64.2% of fraud transactions are never auto-approved** (rejected or held for review), while 81% of legitimate payments flow through to APPROVE. The full decision-path recall is the headline number for the risk manager:
+
+| Outcome | Value |
+|---|---|
+| Fraud caught (REJECT or HOLD, never APPROVED) | **0.642** |
+| Fraud slips through (APPROVED) | 0.358 |
+| Legit APPROVED | 0.809 |
+| Legit held for review (false-hold) | 0.106 |
+| Legit hard-rejected (false-reject) | 0.084 |
 
 Evidence: `docs/reports/phase2-evaluation.md` · `ml/artifacts/evaluation-evidence.json` · regenerate with:
 
 ```bash
 cd ml
-python generate_synthetic.py --seed 99 --n 1000 --out-dir ./data/holdout
-python evaluate.py --model ./artifacts/model.joblib --holdout ./data/holdout/features.csv --threshold 0.53
+python generate_synthetic.py --seed 99 --n 2000 --out-dir ./data/holdout
+python evaluate.py --model ./artifacts/model.joblib --holdout ./data/holdout/features.csv --threshold 0.37
 ```
 
 ### The AI Judge (dispute arbiter)

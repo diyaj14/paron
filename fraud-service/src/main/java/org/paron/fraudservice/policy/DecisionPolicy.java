@@ -10,7 +10,7 @@ import java.util.List;
 @Component
 public class DecisionPolicy {
 
-    @Value("${policy.approve-below:0.35}")
+    @Value("${policy.approve-below:0.15}")
     private double approveBelow;
 
     @Value("${policy.reject-above:0.75}")

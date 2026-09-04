@@ -87,15 +87,21 @@
 >
 > | Metric | AI model | Rules baseline | Delta |
 > |---|---|---|---|
-> | Precision | 1.00 | 0.578 | +0.42 |
-> | Recall | 0.46 | 0.39 | +0.07 |
-> | F1 | 0.630 | 0.466 | +0.16 |
-> | PR-AUC | 0.613 | 0.385 | **+0.23** |
-> | FP cost at ₹500/FP | ₹0 | ₹28,500 | **−₹28,500** |
+> | Precision | 0.978 | 0.602 | +0.38 |
+> | Recall | 0.568 | 0.508 | +0.06 |
+> | F1 | 0.718 | 0.551 | +0.17 |
+> | PR-AUC | 0.709 | 0.445 | **+0.26** |
+> | FP cost at ₹500/FP | ₹2,500 | ₹67,000 | **−₹64,500** |
 
-> "The story isn't the headline number — it's the *cost curve*. The rules alone throw 57 false
-> positives. The hybrid throws zero at this threshold and still catches every loud attack.
+> "But the real number is the **production 3-state decision**: on the same held-out set,
+> the full rules + model + low-signal-guard path keeps **64% of fraud from ever being
+> auto-approved** — they're rejected or held. 81% of legitimate payments still flow
+> straight through to APPROVE. That's the risk manager working the way a risk manager
+> actually works: the loud attacks get hard-rejected by rules, the subtle ones get held
+> for a human, and the AI never auto-approves something it has no history to justify.
 > And the whole report is checked into `docs/reports/` so you can reproduce it yourself."
+
+> *(show the 3-state table: fraud caught 0.642 / legit approved 0.809 / false-hold 0.106 / false-reject 0.084)*
 
 ---
 

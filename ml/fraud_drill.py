@@ -55,7 +55,7 @@ TOKEN_LIMIT = 5000.0
 
 # Decision thresholds + policy defaults — keep in lock-step with
 # fraud-service DecisionPolicy (approve-below / reject-above / min-confidence).
-APPROVE_BELOW = 0.35
+APPROVE_BELOW = 0.15
 REJECT_ABOVE = 0.75
 MIN_CONFIDENCE = 0.6
 
@@ -188,7 +188,7 @@ def decide(model, row):
       2. model confidence < 0.6  -> HOLD              (low signal / fallback)
       3. no 24h history on a     -> HOLD              (low-signal guard: a
          would-be APPROVE for a brand-new device is downgraded)
-      4. model score < 0.35      -> APPROVE
+      4. model score < 0.15      -> APPROVE
       5. model score >= 0.75     -> REJECT
       6. otherwise               -> HOLD              (review band)
     """
@@ -316,7 +316,7 @@ def main():
     }
 
     report_path = out_dir / "fraud_drill_report.json"
-    with open(report_path, "w") as f:
+    with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
     # ── markdown report ─────────────────────────────────────────────────
@@ -343,7 +343,7 @@ def main():
     repo_root = Path(__file__).resolve().parents[1]
     reports_dir = repo_root / "docs" / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
-    with open(reports_dir / "fraud-drill.md", "w") as f:
+    with open(reports_dir / "fraud-drill.md", "w", encoding="utf-8") as f:
         f.write("\n".join(rows) + "\n")
 
     print(f"Scenarios: {passed}/{len(results)} passed")

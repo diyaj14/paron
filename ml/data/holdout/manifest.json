@@ -1,9 +1,9 @@
 {
   "generator_version": "1.0.0",
   "seed": 99,
-  "total_records": 1000,
-  "legitimate_count": 800,
-  "fraud_count": 200,
+  "total_records": 2000,
+  "legitimate_count": 1600,
+  "fraud_count": 400,
   "fraud_rate": 0.2,
   "feature_schema_version": "v1",
   "feature_names": [

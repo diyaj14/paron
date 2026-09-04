@@ -4,10 +4,10 @@
   "scenarios_total": 8,
   "passed": 8,
   "failed": 0,
-  "elapsed_ms": 1496.09,
+  "elapsed_ms": 853.9,
   "decision_policy": {
     "any_rule_hit": "REJECT",
-    "approve_below": 0.35,
+    "approve_below": 0.15,
     "reject_above": 0.75,
     "min_confidence": 0.6
   },
@@ -16,7 +16,7 @@
       "scenario": "NORMAL_PAYMENT",
       "expected": "APPROVE",
       "actual": "APPROVE",
-      "score": 0.1087,
+      "score": 0.0918,
       "rule_hits": [],
       "passed": true,
       "notes": "Genuine small payment; nothing suspicious."
@@ -59,7 +59,7 @@
       "scenario": "UNREGISTERED_DEVICE",
       "expected": "HOLD",
       "actual": "HOLD",
-      "score": 0.1082,
+      "score": 0.0213,
       "rule_hits": [],
       "passed": true,
       "notes": "New device with zero history: fraud-service's low-signal guard (FraudScoringService) downgrades any would-be APPROVE to HOLD_FOR_REVIEW \u2014 a brand-new device never auto-approves."

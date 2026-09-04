@@ -108,6 +108,71 @@ def compute_metrics(y_true, y_prob, threshold, fp_cost_per=500.0):
     }
 
 
+def hard_rule_hit(row):
+    """Mirror fraud-service rule stack: any hit forces a REJECT."""
+    return (
+        row["token_reuse_count"] > 0
+        or row["duplicate_payload_hash_count"] > 0
+        or row["user_tx_count_5m"] > 5
+        or row["amount_to_token_limit_ratio"] > 0.7
+        or row["merchant_amount_deviation"] > 2.0
+    )
+
+
+def confidence_for(score):
+    """Fractional close-to-0.5 distance — same as risk-model-service.compute_confidence."""
+    distance = abs(score - 0.5) * 2
+    return min(0.5 + distance * 0.5, 1.0)
+
+
+def simulate_production_decision(df, y_prob):
+    """Simulate the exact production 3-state path (DecisionPolicy + low-signal guard):
+        1. any hard rule hit                -> REJECT
+        2. model confidence < 0.6           -> HOLD
+        3. would-be APPROVE on brand-new    -> HOLD (low-signal guard)
+        4. model score < 0.15               -> APPROVE
+        5. model score >= 0.75              -> REJECT
+        6. otherwise                        -> HOLD (review band)
+    Returns per-row decisions + aggregated recall/precision for fraud.
+    """
+    decisions = []
+    for i, row in df.iterrows():
+        if hard_rule_hit(row):
+            decisions.append("REJECT")
+            continue
+        score = float(y_prob[i])
+        confidence = confidence_for(score)
+        if confidence < 0.6:
+            decisions.append("HOLD")
+            continue
+        if score < 0.15:
+            decisions.append("HOLD" if row["history_available"] == 0 else "APPROVE")
+            continue
+        if score >= 0.75:
+            decisions.append("REJECT")
+            continue
+        decisions.append("HOLD")
+    decisions = np.array(decisions)
+    y = df["label"].values
+    fraud = decisions[y == 1]
+    legit = decisions[y == 0]
+    return {
+        "approve_below": 0.15,
+        "reject_above": 0.75,
+        "min_confidence": 0.6,
+        "fraud_caught_recall": round(float((fraud != "APPROVE").mean()), 4),
+        "fraud_slip_through": round(float((fraud == "APPROVE").mean()), 4),
+        "legit_approved_precision": round(float((legit == "APPROVE").mean()), 4),
+        "legit_held": round(float((legit == "HOLD").mean()), 4),
+        "legit_rejected": round(float((legit == "REJECT").mean()), 4),
+        "decision_counts": {
+            "approve": int((decisions == "APPROVE").sum()),
+            "hold": int((decisions == "HOLD").sum()),
+            "reject": int((decisions == "REJECT").sum()),
+        },
+    }
+
+
 def get_top_contributions(row, feature_names):
     contribs = []
     for i, name in enumerate(feature_names):
@@ -171,6 +236,7 @@ def main():
 
     latency = latency_percentiles(model, X)
     samples = sample_predictions(df, model, args.threshold, n=5)
+    prod_decision = simulate_production_decision(df, y_prob)
 
     evidence = {
         "model_version": "lr-calibrated-v1.0.0",
@@ -179,6 +245,7 @@ def main():
         "threshold": args.threshold,
         "ai_model": ai_metrics,
         "rules_baseline": rule_metrics,
+        "production_decision": prod_decision,
         "improvement": {
             "pr_auc_delta": round(ai_metrics["pr_auc"] - rule_metrics["pr_auc"], 4),
             "fp_cost_reduction_inr": round(rule_metrics["false_positive_rupee_cost"] - ai_metrics["false_positive_rupee_cost"], 2),
@@ -202,7 +269,7 @@ def main():
         ],
     }
 
-    with open(out_dir / "evaluation-evidence.json", "w") as f:
+    with open(out_dir / "evaluation-evidence.json", "w", encoding="utf-8") as f:
         json.dump(evidence, f, indent=2)
 
     md_lines = [
@@ -231,6 +298,27 @@ def main():
         f"       Fraud   {ai_metrics['confusion_matrix']['fn']:>6}  {ai_metrics['confusion_matrix']['tp']:>6}",
         "```",
         "",
+        "## Production Decision (3-State: APPROVE / HOLD / REJECT)",
+        "",
+        "The metric that matters operationally: does a fraud transaction get auto-approved?",
+        "Simulates the exact DecisionPolicy path (rules gate + calibrated model + low-signal "
+        "guard) on the same holdout.",
+        "",
+        "| Outcome on fraud txns | Value |",
+        "|---|---|",
+        f"| Fraud caught (REJECT or HOLD — never auto-approved) | **{prod_decision['fraud_caught_recall']}** ({prod_decision['fraud_caught_recall']*100:.1f}%) |",
+        f"| Fraud slips through (APPROVED) | {prod_decision['fraud_slip_through']} |",
+        "",
+        "| Outcome on legitimate txns | Value |",
+        "|---|---|",
+        f"| Approved (good precision) | {prod_decision['legit_approved_precision']} |",
+        f"| Held for review (false-hold) | {prod_decision['legit_held']} |",
+        f"| Hard-rejected (false-reject) | {prod_decision['legit_rejected']} |",
+        "",
+        f"Decision distribution: {prod_decision['decision_counts']['approve']} APPROVE / "
+        f"{prod_decision['decision_counts']['hold']} HOLD / "
+        f"{prod_decision['decision_counts']['reject']} REJECT",
+        "",
         "## Latency",
         "",
         f"- Mean: {latency['mean_ms']}ms",
@@ -254,7 +342,7 @@ def main():
     repo_root = Path(__file__).resolve().parents[1]
     reports_dir = repo_root / "docs" / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
-    with open(reports_dir / "phase2-evaluation.md", "w") as f:
+    with open(reports_dir / "phase2-evaluation.md", "w", encoding="utf-8") as f:
         f.write("\n".join(md_lines) + "\n")
 
     zip_path = out_dir / "evaluation-bundle.zip"

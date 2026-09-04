@@ -1,15 +1,15 @@
 {
   "threshold": 0.7,
-  "precision": 0.6038,
-  "recall": 0.4725,
-  "f1": 0.5302,
-  "pr_auc": 0.4292,
+  "precision": 0.6368,
+  "recall": 0.5042,
+  "f1": 0.5628,
+  "pr_auc": 0.4574,
   "confusion_matrix": {
-    "tn": 1476,
-    "fp": 124,
-    "fn": 211,
-    "tp": 189
+    "tn": 1782,
+    "fp": 138,
+    "fn": 238,
+    "tp": 242
   },
-  "false_positive_rupee_cost": 62000.0,
-  "sample_count": 2000
+  "false_positive_rupee_cost": 69000.0,
+  "sample_count": 2400
 }

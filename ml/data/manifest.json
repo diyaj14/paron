@@ -1,9 +1,9 @@
 {
   "generator_version": "1.0.0",
   "seed": 42,
-  "total_records": 10000,
-  "legitimate_count": 8000,
-  "fraud_count": 2000,
+  "total_records": 12000,
+  "legitimate_count": 9600,
+  "fraud_count": 2400,
   "fraud_rate": 0.2,
   "feature_schema_version": "v1",
   "feature_names": [
@@ -32,5 +32,5 @@
     "token_age_known",
     "expiry_known"
   ],
-  "csv_path": "C:\\Users\\Diya Joshy\\paron\\ml\\data\\features.csv"
+  "csv_path": "data\\features.csv"
 }

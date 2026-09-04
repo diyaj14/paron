@@ -54,8 +54,11 @@ public class MainActivity extends Activity {
     private TextView status;
     private TextView receiptLog;
     private TextView balanceLabel;
+    private TextView disputeLabel;
     private EditText merchantIdInput;
     private EditText apiBaseInput;
+    private EditText disputeTxnA;
+    private EditText disputeTxnB;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -74,6 +77,10 @@ public class MainActivity extends Activity {
         apiBaseInput = new EditText(this); apiBaseInput.setHint("API base URL (e.g. http://192.168.1.10:8080)"); root.addView(apiBaseInput, new LinearLayout.LayoutParams(-1, -2));
         Button refresh = new Button(this); refresh.setText("Register & check balance (online)"); refresh.setOnClickListener(v -> refreshMerchantBalance()); root.addView(refresh);
         balanceLabel = new TextView(this); balanceLabel.setText("Merchant balance unavailable while offline."); balanceLabel.setPadding(0, 8, 0, 16); root.addView(balanceLabel);
+        disputeTxnA = new EditText(this); disputeTxnA.setHint("Disputed device txn A"); root.addView(disputeTxnA, new LinearLayout.LayoutParams(-1, -2));
+        disputeTxnB = new EditText(this); disputeTxnB.setHint("Disputed device txn B"); root.addView(disputeTxnB, new LinearLayout.LayoutParams(-1, -2));
+        Button adjudicate = new Button(this); adjudicate.setText("Resolve dispute (AI Judge)"); adjudicate.setOnClickListener(v -> resolveDispute()); root.addView(adjudicate);
+        disputeLabel = new TextView(this); disputeLabel.setText("No dispute resolved yet."); disputeLabel.setPadding(0, 8, 0, 16); root.addView(disputeLabel);
         Button start = new Button(this); start.setText("Start Bluetooth receiver"); start.setOnClickListener(v -> requestPermissionsThenStart()); root.addView(start);
         Button stop = new Button(this); stop.setText("Stop receiver"); stop.setOnClickListener(v -> stopReceiver()); root.addView(stop);
         receiptLog = new TextView(this); receiptLog.setText("No payment received yet."); receiptLog.setPadding(0, 30, 0, 0); root.addView(receiptLog);
@@ -149,6 +156,44 @@ public class MainActivity extends Activity {
             }
         }).start();
     }
+
+    /*
+     * Asks the backend AI Judge to arbitrate a dispute between two offline
+     * receipts (POST /api/v1/sync/adjudicate). The verdict shows who won and
+     * why — all on a background thread, no network on the UI thread.
+     */
+    private void resolveDispute() {
+        final String base = apiBaseInput.getText().toString().trim().replaceAll("/+$", "");
+        final String txnA = disputeTxnA.getText().toString().trim();
+        final String txnB = disputeTxnB.getText().toString().trim();
+        if (base.isEmpty() || txnA.isEmpty() || txnB.isEmpty()) { disputeLabel.setText("Enter API base URL and both device txn ids."); return; }
+        new Thread(() -> {
+            try {
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(base + "/api/v1/sync/adjudicate").openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setDoOutput(true);
+                String body = "{\"deviceTransactionIds\":[\"" + txnA + "\",\"" + txnB + "\"]}";
+                conn.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
+                int status = conn.getResponseCode();
+                if (status != 200) { conn.disconnect(); final int code = status; runOnUiThread(() -> disputeLabel.setText("Adjudication failed (HTTP " + code + ")")); return; }
+                java.io.InputStream stream = conn.getInputStream();
+                java.util.Scanner scanner = new java.util.Scanner(stream, "UTF-8").useDelimiter("\\A");
+                String response = scanner.hasNext() ? scanner.next() : "";
+                scanner.close();
+                conn.disconnect();
+                JSONObject verdict = new JSONObject(response);
+                final String ruling = verdict.optString("ruling", "UNKNOWN");
+                final String winner = verdict.optString("winnerDeviceTransactionId", "");
+                final String summary = verdict.optString("summary", "");
+                final double confidence = verdict.optDouble("confidence", 0);
+                runOnUiThread(() -> disputeLabel.setText("AI Judge: " + ruling + " (conf " + String.format("%.2f", confidence) + ")\nWinner: " + (winner.isEmpty() ? "none" : winner) + "\n" + summary));
+            } catch (Exception e) {
+                runOnUiThread(() -> disputeLabel.setText("Backend unreachable: " + e.getMessage()));
+            }
+        }).start();
+    }
+
     private final AdvertiseCallback advertiseCallback = new AdvertiseCallback() { @Override public void onStartFailure(int errorCode) { setStatus("Could not advertise (error " + errorCode + ")."); } };
 
     private final BluetoothGattServerCallback gattCallback = new BluetoothGattServerCallback() {
