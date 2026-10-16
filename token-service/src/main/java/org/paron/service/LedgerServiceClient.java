@@ -1,8 +1,11 @@
 package org.paron.service;
-import lombok.extern.slf4j.Slf4j;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;import lombok.extern.slf4j.Slf4j;
+import org.paron.exception.TokenException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
@@ -19,7 +22,7 @@ import java.util.Map;
  * In production you would use:
  *   - Spring Cloud OpenFeign (declarative HTTP client) — much cleaner
  *   - Or WebClient (reactive, non-blocking)
- * For simplicity we use RestTemplate here which you already know.
+ * For simplicity we use RestTemplate here
  */
 
 @Component
@@ -30,7 +33,8 @@ public class LedgerServiceClient {
 /*When you create this object,
  * go open the settings file,
 * find the value at services.ledger.url,
-and plug that value in right here,@allargsconstruotr doesnt help to use @value annotaiton
+and plug that value in right here,
+* @allargsconstruotr doesn't help to use @value annotaiton
 */
     public LedgerServiceClient(RestTemplate restTemplate,@Value("${services.ledger.url}") String ledgerServiceUrl) {
         this.restTemplate = restTemplate;
@@ -59,8 +63,34 @@ and plug that value in right here,@allargsconstruotr doesnt help to use @value a
          has String keys and String values — it's trusting you. (Java cant identify
          type of map at runtime
          */
-        @SuppressWarnings("unchecked")
-        Map<String,String> response = restTemplate.postForObject(url,requestEntity,Map.class);
+        Map<String,String> response;
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String,String> raw = restTemplate.postForObject(url,requestEntity,Map.class);
+            response = raw;
+        } catch (HttpStatusCodeException e) {
+            // Ledger returned an error (e.g. INSUFFICIENT_FUNDS). Surface it as a
+            // proper business error instead of letting it bubble up as a 500.
+            String errorCode = "LEDGER_ERROR";
+            String message = "Ledger-service rejected the reservation (HTTP " + e.getStatusCode().value() + ")";
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                Map<String, Object> parsedBody = mapper.readValue(
+                        e.getResponseBodyAsString(),
+                        new TypeReference<Map<String, Object>>() {});
+                if (parsedBody != null) {
+                    if (parsedBody.get("errorCode") != null) {
+                        errorCode = String.valueOf(parsedBody.get("errorCode"));
+                    }
+                    if (parsedBody.get("message") != null) {
+                        message = String.valueOf(parsedBody.get("message"));
+                    }
+                }
+            } catch (Exception ignored) {
+                // Response body wasn't JSON; fall back to the defaults above
+            }
+            throw new TokenException(errorCode, message);
+        }
         if (response == null || !response.containsKey("reservationId")) {
             throw new RuntimeException("Invalid response from ledger-service during reserve");
         }
@@ -79,6 +109,50 @@ and plug that value in right here,@allargsconstruotr doesnt help to use @value a
 
         restTemplate.postForObject(url, requestEntity, Void.class);
 
+    }
+
+    /*
+     * Calls POST /api/v1/ledger/settle on ledger-service.
+     * Used when a token is marked as USED — debits the actual spent amount
+     * and releases any remaining reserved funds back to available balance.
+     */
+    public void settleReservation(String reservationId, BigDecimal spentAmount) {
+        String url = ledgerServiceUrl + "/api/v1/ledger/settle";
+        Map<String, Object> body = Map.of(
+                "reservationId", reservationId,
+                "spentAmount", spentAmount
+        );
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+        log.info("Calling ledger-service to settle reservation. reservationId={}, spentAmount={}",
+                reservationId, spentAmount);
+
+        try {
+            restTemplate.postForObject(url, requestEntity, Void.class);
+        } catch (HttpStatusCodeException e) {
+            // Ledger rejected the settlement (e.g. RESERVATION_ALREADY_CLOSED on replay).
+            // Surface it as a proper business error instead of a raw 500.
+            String errorCode = "LEDGER_ERROR";
+            String message = "Ledger-service rejected the settlement (HTTP " + e.getStatusCode().value() + ")";
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                Map<String, Object> parsedBody = mapper.readValue(
+                        e.getResponseBodyAsString(),
+                        new TypeReference<Map<String, Object>>() {});
+                if (parsedBody != null) {
+                    if (parsedBody.get("errorCode") != null) {
+                        errorCode = String.valueOf(parsedBody.get("errorCode"));
+                    }
+                    if (parsedBody.get("message") != null) {
+                        message = String.valueOf(parsedBody.get("message"));
+                    }
+                }
+            } catch (Exception ignored) {
+                // Response body wasn't JSON; fall back to the defaults above
+            }
+            throw new TokenException(errorCode, message);
+        }
     }
 
 

@@ -50,7 +50,7 @@ public class TokenController {
     actual jwt value - return all tokens - actived,used,expired
      */
     @GetMapping("/history/{userId}")
-    public ResponseEntity<List<TokenResponse>> getTokenHistory(@Valid @RequestParam String userId){
+    public ResponseEntity<List<TokenResponse>> getTokenHistory(@PathVariable String userId){
         List<TokenResponse> response=tokenService.getTokenHistory(userId);
         return ResponseEntity.ok(response);
     }

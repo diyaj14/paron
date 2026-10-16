@@ -1,0 +1,54 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-08-02T23:50:19.167+05:30  INFO 28688 --- [api-gateway] [           main] o.p.apigateway.ApiGatewayApplication     : Starting ApiGatewayApplication v1.0 using Java 26.0.1 with PID 28688 (E:\payment\api-gateway\target\api-gateway-1.0.jar started by rehna in E:\payment)
+2026-08-02T23:50:19.192+05:30 DEBUG 28688 --- [api-gateway] [           main] o.p.apigateway.ApiGatewayApplication     : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-08-02T23:50:19.196+05:30  INFO 28688 --- [api-gateway] [           main] o.p.apigateway.ApiGatewayApplication     : No active profile set, falling back to 1 default profile: "default"
+2026-08-02T23:50:25.654+05:30  INFO 28688 --- [api-gateway] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-08-02T23:50:25.674+05:30  INFO 28688 --- [api-gateway] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-08-02T23:50:25.864+05:30  INFO 28688 --- [api-gateway] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 70 ms. Found 0 Redis repository interfaces.
+2026-08-02T23:50:27.426+05:30  INFO 28688 --- [api-gateway] [           main] o.s.cloud.context.scope.GenericScope     : BeanFactory id=449f8069-a3b4-32a0-b8f8-f8de2b2baef2
+2026-08-02T23:50:36.317+05:30  WARN 28688 --- [api-gateway] [           main] o.h.v.i.m.a.CascadingMetaDataBuilder     : HV000271: Using `@Valid` on a container (java.util.List) is deprecated. You should apply the annotation on the type argument(s). Affected element: routes
+2026-08-02T23:50:36.679+05:30  WARN 28688 --- [api-gateway] [           main] o.h.v.i.m.a.CascadingMetaDataBuilder     : HV000271: Using `@Valid` on a container (java.util.List) is deprecated. You should apply the annotation on the type argument(s). Affected element: filters
+2026-08-02T23:50:36.686+05:30  WARN 28688 --- [api-gateway] [           main] o.h.v.i.m.a.CascadingMetaDataBuilder     : HV000271: Using `@Valid` on a container (java.util.List) is deprecated. You should apply the annotation on the type argument(s). Affected element: predicates
+2026-08-02T23:50:37.739+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [After]
+2026-08-02T23:50:37.747+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [Before]
+2026-08-02T23:50:37.748+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [Between]
+2026-08-02T23:50:37.754+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [Cookie]
+2026-08-02T23:50:37.760+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [Header]
+2026-08-02T23:50:37.766+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [Host]
+2026-08-02T23:50:37.771+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [Method]
+2026-08-02T23:50:37.774+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [Path]
+2026-08-02T23:50:37.776+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [Query]
+2026-08-02T23:50:37.781+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [ReadBody]
+2026-08-02T23:50:37.783+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [RemoteAddr]
+2026-08-02T23:50:37.786+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [Version]
+2026-08-02T23:50:37.790+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [XForwardedRemoteAddr]
+2026-08-02T23:50:37.795+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [Weight]
+2026-08-02T23:50:37.798+05:30  INFO 28688 --- [api-gateway] [           main] o.s.c.g.r.RouteDefinitionRouteLocator    : Loaded RoutePredicateFactory [CloudFoundryRouteService]
+2026-08-02T23:50:39.749+05:30  INFO 28688 --- [api-gateway] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoints beneath base path '/actuator'
+2026-08-02T23:50:45.782+05:30  WARN 28688 --- [api-gateway] [           main] onfigReactiveWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Failed to start bean 'webServerStartStop'
+2026-08-02T23:50:45.876+05:30  INFO 28688 --- [api-gateway] [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-08-02T23:50:45.966+05:30 ERROR 28688 --- [api-gateway] [           main] o.s.b.d.LoggingFailureAnalysisReporter   : 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Web server failed to start. Port 8080 was already in use.
+
+Action:
+
+Identify and stop the process that's listening on port 8080 or configure this application to listen on another port.
+

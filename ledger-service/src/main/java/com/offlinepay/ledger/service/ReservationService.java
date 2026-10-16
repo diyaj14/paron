@@ -9,6 +9,7 @@ import com.offlinepay.ledger.repository.AccountRepository;
 import com.offlinepay.ledger.repository.ReservationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +32,11 @@ public class ReservationService {
 
     private final AccountRepository     accountRepository;
     private final ReservationRepository reservationRepository;
+
+    // Hard per-user cap on total amount locked in ACTIVE reservations.
+    // Injected from ledger.max-active-reserved (defaults to ₹500).
+    @Value("${ledger.max-active-reserved:500.00}")
+    private BigDecimal maxActiveReserved;
 
     // ─────────────────────────────────────────────────────────────────────────
     // 1. RESERVE FUNDS
@@ -72,6 +78,19 @@ public class ReservationService {
         if (account.getAvailableBalance().compareTo(request.getAmount()) < 0) {
             throw new InsufficientFundsException(
                     request.getUserId(), request.getAmount(), account.getAvailableBalance());
+        }
+
+        // The per-user cap check — never let a user hold more than the maximum
+        // offline amount across ALL their active reservations at once.
+        // Because we hold the account row lock (findByUserIdForUpdate above),
+        // every reserve/release/settle for this user serializes through here,
+        // so this sum is guaranteed race-free: a concurrent second request
+        // cannot slip in between this check and the insert below.
+        BigDecimal alreadyReserved = reservationRepository
+                .sumReservedAmountByUserIdAndStatus(request.getUserId(), ReservationStatus.ACTIVE);
+        if (alreadyReserved.add(request.getAmount()).compareTo(maxActiveReserved) > 0) {
+            throw new ReserveLimitExceededException(
+                    request.getUserId(), request.getAmount(), alreadyReserved, maxActiveReserved);
         }
 
         // Lock the funds: subtract from available, total stays unchanged

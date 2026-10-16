@@ -33,4 +33,7 @@ build/
 .vscode/
 node_modules/
 .env
-.env
+set-env.ps1
+dev-keys/
+.implement
+implement

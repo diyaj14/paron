@@ -9,7 +9,7 @@ spring:
   # Replace the placeholders below with your actual Supabase values.
   # Go to: Supabase Dashboard → Your Project → Settings → Database → URI
   datasource:
-    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}
+    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}?sslmode=require&connect_timeout=90&tcpKeepAlive=true
     username: ${SUPABASE_USER}
     password: ${SUPABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -52,7 +52,7 @@ management:
 # ─── Logging ──────────────────────────────────────────────────────────────
 logging:
   level:
-    com.offlinepay.token: DEBUG
+    org.paron: DEBUG
     org.springframework.security: INFO
 #ledger client
 services:
