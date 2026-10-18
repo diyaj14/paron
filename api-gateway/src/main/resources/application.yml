@@ -66,6 +66,18 @@ spring:
                 redis-rate-limiter.burstCapacity: 30
                 redis-rate-limiter.requestedTokens: 1
 
+        # PayPal sandbox funding — create/capture only reach this backend through the gateway.
+        - id: paypal-funding
+          uri: ${PAYPAL_FUNDING_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/funding/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
+
         # ── Public liveness probes (no auth, see AuthFilter allowlist) ──────
         # Each backend exposes GET/POST /api/v1/<service>/ping
         - id: ping-token

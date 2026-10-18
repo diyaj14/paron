@@ -40,5 +40,7 @@ public class AdjudicationResponse {
     private List<EvidenceCheck> evidence;
     private String summary;
     private boolean binding;
+    private List<org.paron.syncservice.dto.adjudicate.AdjudicationAction> actions;
     private LocalDateTime adjudicatedAt;
 }
+

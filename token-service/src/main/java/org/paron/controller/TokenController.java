@@ -30,9 +30,16 @@ public class TokenController {
         return ResponseEntity.status(HttpStatus.CREATED).body(tokenResponse);
     }
 
-    /*Validate token before transaction*/
+    /*Validate token before transaction (GET alias, kept for compatibility)*/
     @GetMapping("/validateToken")
     public ResponseEntity<ValidateTokenResponse> validate(@Valid @RequestBody ValidateTokenRequest request){
+        ValidateTokenResponse validate =tokenService.validate(request);
+        return ResponseEntity.ok(validate);
+    }
+
+    /*Validate token before transaction (POST — what sync-service calls)*/
+    @PostMapping("/validate")
+    public ResponseEntity<ValidateTokenResponse> validatePost(@Valid @RequestBody ValidateTokenRequest request){
         ValidateTokenResponse validate =tokenService.validate(request);
         return ResponseEntity.ok(validate);
     }

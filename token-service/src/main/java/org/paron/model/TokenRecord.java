@@ -11,6 +11,7 @@ package org.paron.model;
  * Table columns:
  *   id               — primary key (UUID, auto-generated)
  *   user_id          — who this token belongs to
+ *   device_id        — the device this token is bound to
  *   reservation_id   — the matching reservation in ledger-service
  *   token_value      — the full signed JWT string
  *   max_amount       — how much the user was allowed to spend offline
@@ -49,6 +50,11 @@ public class TokenRecord {
     // Who owns this token — matches the userId from the mobile app login
     @Column(name = "user_id", nullable = false)
     private String userId;
+
+    // The device this token is bound to (issued to one device only).
+    // Validation rejects the token if a different device presents it.
+    @Column(name = "device_id")
+    private String deviceId;
 
     // Foreign key reference to the reservation created in ledger-service
     // We store it as a String here because we call ledger-service via HTTP,

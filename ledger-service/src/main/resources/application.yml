@@ -5,6 +5,15 @@ spring:
   application:
     name: ledger-service
 
+  # Load SUPABASE_* from the repo .env. spring-dotenv 4.0.0 is binary-incompatible
+  # with Boot 4 (ConfigurableBootstrapContext moved packages), so it never fires.
+  # Two candidates cover both working directories: repo root (./.env) and
+  # ledger-service/ when running mvn spring-boot:run (../.env).
+  config:
+    import:
+      - "optional:file:./.env[.properties]"
+      - "optional:file:../.env[.properties]"
+
   # Same Supabase project as token-service, different tables (accounts, reservations)
   datasource:
     url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}?sslmode=require&connect_timeout=90&tcpKeepAlive=true

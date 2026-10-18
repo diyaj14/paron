@@ -1,0 +1,195 @@
+PARON-1 MICROSERVICE AUDIT
+Date: 2026-10-18
+Method: static source review + targeted spot-checks. No builds, tests, or end-to-end runs were executed.
+Scope: 5 core services (api-gateway 8080, token-service 8081, ledger-service 8082, sync-service 8083,
+       fraud-service 8084) + paypal-funding-service (8085, newer 6th module).
+Legend: WORKS = implemented; INCOMPLETE = present but broken/partial/unwired; SIMULATED = appears
+        functional but is mock/synthetic, or claimed by docs but absent in code.
+
+==============================================================================
+API-GATEWAY (8080) - edge proxy, auth filter, rate limit, CORS, logging
+==============================================================================
+WORKS
+- 16 routes proxy 8081-8085 incl. token/ledger/sync/fraud/paypal + actuator passthroughs
+  (src/main/resources/application.yml:18-218); route prefix verified valid for Cloud Gateway 5.
+- Global AuthFilter parses Bearer JWT and injects X-User-Id / X-User-Roles headers
+  (filter/AuthFilter.java:71-80).
+- Rate limiter keyed per user, falling back to per-IP (config/RateLimitConfig.java:14-21).
+- LoggingFilter logs method/path/status/duration after the chain (filter/LoggingFilter.java:32-38).
+- pre-existing fix: routes correctly under spring.cloud.gateway.server.webflux.routes (yml:11-13).
+INCOMPLETE
+- Auth is non-functional as shipped: JWT_PUBLIC_KEY defaults empty (yml:251) -> GatewayConfig
+  returns a null PublicKey bean (config/GatewayConfig.java:20-23) -> protected routes 500
+  (AuthFilter.java:46-49).
+- Key scheme is mismatched: gateway expects RS256 public key, but token-service signs HS512 with a
+  symmetric secret (token-service/security/JwtUtil.java:82); no RSA private key/issuer exists
+  anywhere in the repo (only a "future auth service" comment, yml:242-248).
+- Backend actuator passthroughs are fully unauthenticated (AuthFilter.java:90 + yml:172-218);
+  own health endpoint exposes details always (yml:260-261).
+- Tests: 1 file, asserts a single route id exists (test/.../ApiGatewayApplicationTests.java:26-29).
+SIMULATED
+- Rate limiting fails OPEN if Redis is absent (RedisRateLimiter onErrorResume allows the request);
+  Redis .env values are empty.
+- api-gateway-architecture.md claims: "gettoken blocked/internal-only" (yml:128-132 actually routes
+  it), lb:// service discovery (code uses fixed localhost URIs), CORS "*" (code uses explicit
+  origins), dev-keys/private.pem / set-env.ps1 / cd E:\payment (none exist).
+- Two divergent architecture docs repeat stale claims not matching code.
+
+==============================================================================
+TOKEN-SERVICE (8081) - issues/validates HS512 offline spending tokens
+==============================================================================
+WORKS
+- 6 endpoints: gettoken, validateToken, mark-used, history/{userId}, state, ping
+  (controller/TokenController.java:26,34,41,52,60,67).
+- Real HS512 JWT with sub/tokenId/reservationId/maxAmount/iat/exp
+  (security/JwtUtil.java:73-83); the "PENDING placeholder" comments (service/TokenService.java:64-68)
+  are stale - the row is updated with the real JWT immediately (:77-87).
+- 2-layer validation: signature check + DB status/cumulative-spend limit
+  (service/TokenService.java:123,135-155); duplicate-active issuance is blocked.
+- Issuance reserves funds in ledger first (/api/v1/tokens/gettoken flow via LedgerServiceClient).
+- Tests: TokenServiceTest asserts real issuance + duplicate guard (test/.../TokenServiceTest.java:61-110).
+INCOMPLETE
+- @Scheduled expiry job exists (service/TokenService.java:239) but @EnableScheduling is absent from
+  the whole service (only sync-service has it) -> job never runs; stale reservations never released.
+- settleReservation() (service/LedgerServiceClient.java:119) has NO caller in token-service ->
+  spent tokens never debit the ledger; releaseReservation() has no error handling.
+- Actuator config present (application.yml:50-57) but no actuator dependency -> /actuator/health 404s.
+- Dead code: TokenRepository.expireOldTokens, JwtUtil.isTokenValid/extractUserIdIgnoreExpiry,
+  jwt.service-token-expiry-hours.
+SIMULATED
+- SecurityConfig grants permitAll on /api/v1/tokens/** (config/SecurityConfig.java:50); comments and
+  architecture.md claim internal API-key/session protection - not enforced. No service-to-service
+  auth exists anywhere in the repo.
+- Docs say "one-time-use"; code is cumulative-spend (mark-used repeatable until maxAmount reached,
+  service/TokenService.java:174-193).
+
+==============================================================================
+LEDGER-SERVICE (8082) - authoritative balances, reservations, merchants, funding
+==============================================================================
+WORKS
+- 9 endpoints over 4 controllers: create-test-account; reserve/release/settle/balance/ping;
+  merchants register/get/credit; funding credit.
+- reserveFunds: transactional, pessimistic account lock (repository/AccountRepository.java:30),
+  sufficient-funds check, 500.00 per-user ACTIVE-reservation cap, debits available only
+  (service/ReservationService.java:69-97).
+- release returns reserved-minus-settled (:157-163); settle debits total, accumulates settledAmount,
+  closes when fully spent, rejects overspend (:222-242).
+- Idempotent funding credit via unique funding_id + check after account lock
+  (service/FundingCreditService.java:23-35).
+- Tests: ReservationServiceTest (6 real assertions), MerchantServiceTest (4).
+INCOMPLETE
+- MerchantAccountRepository.findByMerchantIdForUpdate is commented "Locking read" but has NO @Lock
+  (repository/MerchantAccountRepository.java:15-17) -> concurrent merchant credits can lose updates.
+- SettleResponse.releasedAmount is always BigDecimal.ZERO (service/ReservationService.java:253),
+  contradicting SettleRequest docs (:10-17).
+- No idempotency key on reserve/settle -> retried reserve double-reserves (bounded only by cap);
+  retried settle double-debits (bounded by reserved amount).
+- Unused: ReservationRepository.findByUserIdAndStatus, AppConfig @EnableJpaAuditing,
+  spring-dotenv dependency (inert on Boot 4).
+- architecture.md omits merchant/funding/security; run instructions point at non-existent E:\payment.
+SIMULATED
+- Account is a mock balance table, not mirrored from any real bank; create-test-account mints
+  arbitrary balances (controller/AccountController.java:17-48).
+- SecurityConfig permits ALL /api/v1/ledger/** (config/SecurityConfig.java:55) -> the "internal-only"
+  funding credit endpoint and test-account seeding are fully unauthenticated.
+
+==============================================================================
+SYNC-SERVICE (8083) - signed offline-txn intake, Kafka, batch settlement, disputes
+==============================================================================
+WORKS
+- 4 endpoints: submit sync, get status, ping, adjudicate (controller/SyncController.java:43,57,63,73).
+- Genuine ECDSA P-256 signature verification (canonical string, JWK->key, raw r||s->DER)
+  (signature/SignatureVerifier.java:107-133); tests include real crypto round-trip/tamper cases.
+- Idempotency via Redis setIfAbsent + DB unique index; persistence in the Kafka consumer.
+- Kafka topic config, producer/consumer, HTTP clients to token/ledger/fraud with 5s/10s timeouts,
+  settlement job scheduled every 30s.
+- Tests: 5 files - 7 adjudication rulings, 6 processor paths, crypto tests.
+INCOMPLETE
+- settlementReader is a singleton ListItemReader built once at startup (batch/SettlementJobConfig.java:40-44)
+  -> after the first run every 30s job reads an exhausted list; statuses never advance to SETTLED and
+  no money ever moves. (Real bug.)
+- Kafka unusable as shipped: .env KAFKA_BOOTSTRAP_SERVERS/JAAS empty while SASL_PLAINTEXT/SCRAM is
+  configured; submit still returns 202 and only calls un-acked send() (kafka/TransactionProducer.java:39)
+  -> transactions silently vanish, nothing is persisted.
+- Redis empty -> IdempotencyService throws -> consumer fails -> no rows saved.
+- Resilience4j @Retry/@CircuitBreaker with no AOP starter on classpath -> annotations likely never woven.
+SIMULATED
+- "AI judge" is a deterministic if/else rule tree; LLM adjudicator disabled by default (no
+  adjudicator.llm.* config) (service/DisputeReasoner.java:32,45-52); confidence is the fraction of
+  evidence checks passed, not a model output.
+- Due to the reader bug, settledA/settledB are always false -> every real dispute collapses to
+  INSUFFICIENT_EVIDENCE; the 5 verdict types are reachable only in Mockito tests.
+- "accepted" means only that KafkaTemplate.send() was invoked (no broker ack/callback check).
+
+==============================================================================
+FRAUD-SERVICE (8084) - risk scoring + alert review
+==============================================================================
+WORKS
+- 4 endpoints: check, alerts, alerts/{id}/review, ping (controller/FraudController.java:32,83,92,100).
+- Pipeline: rules summed+clamped -> 24-feature vector -> ModelClient POST to
+  ${model.service.url:http://localhost:8600}/v1/score -> DecisionPolicy (service/FraudScoringService.java:41-54).
+- 4 of 5 rules do real Redis-history comparisons: AmountAnomaly (avg x3), Velocity (60s),
+  TokenReuse (cross-device), TemporalImpossibility (rules/*.java).
+- Model unreachable -> HOLD "model_unavailable"; no hardcoded score (policy/DecisionPolicy.java:33-41).
+- Alerts persist + review flow complete (model/FraudAlert.java:19-33, service/FraudAlertService.java:28-38).
+- risk-model-service (python) really serves a calibrated LR artifact (risk-model-service/app/main.py:168,179).
+SIMULATED / BROKEN
+- No application.yml exists at all in fraud-service (no src/main/resources) -> no port, datasource,
+  redis, kafka, policy config; everything relies on @Value defaults, though docs describe the file.
+- No RestTemplate @Bean exists while ModelClient requires one (policy/ModelClient.java:24; only
+  SecurityConfig has a @Bean) -> Spring context cannot start this service as-is.
+- TIME_PATTERN rule can never fire: it increments the hour bucket, then checks whether the score is
+  null/0 (rules/TimePatternRule.java:37-53) - unreachable in real Redis; the unit test passes only by
+  stubbing the score independently.
+- 2 of 24 model features are constants: previous_settlement_failed always 0 and
+  merchant_risk_aggregate never written (feature/RiskFeatureBuilder.java:105,193-202).
+- Model is trained on 100% synthetic data (ml/generate_synthetic.py -> ml/data/features.csv).
+- Reported score/riskLevel is the RULE sum, not the model score (service/FraudScoringService.java:79-80)
+  -> decisions can contradict the reported score (e.g. REJECT with 0.0). fraud.score-threshold is
+  injected but never read.
+- Kafka dependency present but zero @KafkaListener; the consumer described in docs was removed.
+- Redis/Postgres outage -> every /check returns 500 (no try/catch around rule/feature Redis calls).
+
+==============================================================================
+PAYPAL-FUNDING-SERVICE (8085) - real-money top-up into the ledger
+==============================================================================
+WORKS
+- 4 endpoints: paypal config, create order, capture order, funding status
+  (controller/FundingController.java:15-18).
+- create: amount cap (paypal.maximum-amount, default 500.00), persists attempt, creates PayPal order,
+  returns approve URL (service/FundingService.java:26-35).
+- capture: idempotent early-return when already CREDITED; requires PayPal COMPLETED; verifies captured
+  amount AND currency match the attempt before crediting (service/FundingService.java:39-53).
+- Ledger side dedupes by unique funding_id under a pessimistic account lock -> retries cannot double-credit.
+- PaypalClient: real Orders v2 + OAuth2 client_credentials; secret never leaves the server
+  (service/PaypalClient.java).
+INCOMPLETE
+- No authentication on any endpoint; CORS limited to localhost:3000/5173 (config/WebConfig.java:14-19).
+- PayPal access token fetched per call, never cached (service/PaypalClient.java:36-42).
+- PayPal error bodies are not mapped to meaningful 4xx/409 responses.
+- External HTTP (PayPal + ledger) runs inside @Transactional methods; if the ledger credits but the
+  local commit fails, the attempt is not marked CREDITED - consistency relies on ledger dedupe alone.
+- No tests at all (src/test absent).
+SIMULATED
+- None material. The public config endpoint exposing only clientId + currency is intentional
+  (api/PaypalPublicConfig.java); no fake/mocked PayPal behavior found.
+
+==============================================================================
+CROSS-CUTTING (infra, wiring, clients)
+==============================================================================
+- docker-compose.yml starts ONLY Kafka and Redis. It does not start any of the 6 Spring services,
+  Postgres/Supabase, or risk-model-service.
+- .env: Supabase creds and JWT_SECRET set; KAFKA_* and REDIS_* empty -> Kafka-dependent flows
+  (sync), Redis-dependent flows (gateway rate limit, fraud rules, sync idempotency) are non-functional
+  locally even though docker-compose could supply them.
+- start-services.ps1 is stale: references E:\payment and a missing set-env.ps1, omits
+  paypal-funding-service and risk-model-service. README also documents set-env.ps1, which does not exist.
+- Clients match real endpoints: PWA calls token/ledger/sync + paypal-funding (/api/funding/paypal/*);
+  Android merchant app calls merchants/register, merchants/{id}, sync/adjudicate - all present in code.
+- Tooling exists but is not runnable as-is: testing-guide.http (localhost 8080-8084, no PayPal calls);
+  scripts/e2e-smoke-test.ps1 live mode needs set-env.ps1 and risk-model-service on :8600 (never started).
+- Every Spring service: ddl-auto=update (auto-migrated schema), CSRF disabled, and no
+  service-to-service authentication anywhere - internal endpoints are protected only by the gateway,
+  which itself cannot currently authenticate requests.
+- The JWT story is split: token-service mints HS512 tokens; gateway verifies RS256; no RS256 issuer
+  or key material exists. "User session" auth (X-User-Id injection) is therefore not operable end to end.

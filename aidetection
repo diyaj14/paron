@@ -1,0 +1,233 @@
+Synthetic data is not automatically a pathetic option. For your project, the weak approach would be training an AI on invented transactions, reporting 99% accuracy, and claiming it can detect real financial fraud. The strong approach is to use a real public fraud dataset, evaluate the model under realistic conditions, and clearly disclose the limits of applying it to offline payments.
+
+Your architecture actually makes sense: the AI doesn't need to operate while the user is offline. It can assess the risk of pending transactions when connectivity returns, before settlement.
+
+I'd build this as a hybrid fraud-detection system: deterministic security checks for transactions that must be rejected, plus an ML model that estimates fraud risk and flags suspicious transactions for review or stricter handling.
+
+## 1. Which real-world datasets should you use?
+
+There are public datasets with real fraud labels, but none of the widely used public datasets perfectly represents your problem: offline transactions authorized by signed tokens and checked for fraud at settlement.
+
+Here are the best options for your project.
+
+[Revolutionizing fraud detection using machine learning in credit card security: International Journal of Computers and Applications: Vol 47 , No 12  - Get Access](https://images.openai.com/static-rsc-4/_vcn9zrtZVliP4G2YKWDVhTPUP7qG6trLzBUiZ7A0fvvVml_MdoB0B9EeqRI_8U8Jl_HuAeVBVlR_UgzJuA48RLBZsK1sB7vyfHwIapANI6qy4Naufc5a6WMG9uJMxXU8fV54sA7rIqEY5ITgahsy4YBXJBPKXKDiCzvmdF9pU8?purpose=inline)
+
+1\. Credit Card Fraud Detection (ULB)
+
+Best real-data baseline
+
+284,807 transactions · 492 fraud cases · 2013
+
+This contains real, anonymized European card transactions. Only about 0.172% are fraudulent, making it useful for testing rare-event detection and imbalanced classification. Most input features are PCA-transformed, however, so they don't map cleanly to your offline payment features.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://www.kaggle.com\&sz=32)
+
+Kaggle
+
++1
+
+
+
+[Get the dataset on Kaggle](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud?utm_source=chatgpt.com)
+
+[Credit Card Fraud Detection. An Exercise In Class Imbalance. | by Zain Khan | Analytics Vidhya | Medium](https://images.openai.com/static-rsc-4/70fjV3gH2RW1iqbS8Us5ZpRFGlVcM1VaXo934zq4uEIYH-VrVp552LqAMfi_tKqhY2hcPjBN7kzQGr_CBDcTl6lrqRqrlo5ome-I2DJibT-x-9FKM2rszRNJZq2m21BpwdM7lCXAHMzX9jzajUgzogqH2yHJ7j9IzRsFT60yTTg?purpose=inline)
+
+2\. IEEE-CIS Fraud Detection
+
+Best for richer transaction features
+
+Large transaction and identity tables · labeled fraud outcomes
+
+It includes transaction amounts, time-related fields, card-related attributes, and device/identity information. It is richer than the ULB dataset, but represents online commerce rather than offline payments, and some fields are masked. Check the competition terms before redistributing or publishing derived data.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://www.kaggle.com\&sz=32)
+
+Kaggle
+
++1
+
+
+
+[Get the dataset on Kaggle](https://www.kaggle.com/competitions/ieee-fraud-detection/data?utm_source=chatgpt.com)
+
+[Simulating Mobile Money Fraud 🤑 (PaySim pt.1)      | Dave Voutila](https://images.openai.com/static-rsc-4/gNYIghrQJsgQDU7No-saGXma0RcBeO07tA_HIXWZur28_XHxOh7-tyb6uHV5NQfi6OtpjWjddkRT7PB0jFWrj_Sr0oWCNclb5y9-UVgkaiWEV1-QVM-8SHCu1oLr0POHgLoXxFVmBVRtJn0N6dLi3M03VoSGD-eUzRCvbszsZyY?purpose=inline)
+
+3\. PaySim
+
+Synthetic, not real transaction records
+
+Approximately 6.36 million simulated transactions
+
+PaySim models mobile-money activity using patterns derived from real transaction logs, but its published transaction records are simulated. It includes transaction types, amounts, balances and fraud labels, making it useful for prototyping transaction-risk features similar to your system.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://github.com\&sz=32)
+
+GitHub
+
++1
+
+
+
+[Get PaySim on Kaggle](https://www.kaggle.com/datasets/ealaxi/paysim1?utm_source=chatgpt.com)
+
+### What about actual Indian UPI fraud data?
+
+I would not assume that public UPI datasets with verified fraud labels are available in a form suitable for your project. Banks and payment providers generally have access to the transaction-level data you would ideally want, but sharing it publicly creates privacy, security and commercial issues.
+
+For a credible student project, use ULB or IEEE-CIS for real-data evaluation, and a separate offline-payment dataset for your system-specific behavior. Don't describe PaySim as real transaction data.
+
+## 2. Are there pretrained models you can fine-tune?
+
+For this problem, I would train a tabular classification model rather than fine-tune an LLM.
+
+| Model              | Why use it?                                           | Recommendation                                      |
+| ------------------ | ----------------------------------------------------- | --------------------------------------------------- |
+| CatBoost           | Handles mixed numerical and categorical features well | Excellent first choice                              |
+| XGBoost / LightGBM | Strong gradient-boosted tree baselines                | Compare against CatBoost                            |
+| Isolation Forest   | Detects unusual patterns without fraud labels         | Useful secondary experiment                         |
+| Neural networks    | Can learn complex patterns with enough suitable data  | Not my first choice here                            |
+| LLM                | Can summarize risk reasons for investigators          | Optional; don't use as the primary fraud classifier |
+
+For your offline payment system, start with CatBoost or XGBoost. They are not pretrained fraud models; you train them on labeled transactions. That is generally more defensible than downloading an arbitrary model and claiming it transfers to a different payment domain.
+
+Why not directly fine-tune a pretrained fraud model? A model trained on card-present or online card transactions has learned patterns from that environment. Your system has different signals: reserved spending limits, token expiry, delayed synchronization, repeated offline transactions, and settlement timing. Those differences create domain shift.
+
+## 3. How I would implement AI fraud detection in OfflinePay AI
+
+I would build a dedicated Python inference service using FastAPI + CatBoost, while keeping your existing Spring Boot microservices responsible for payment authorization, synchronization and settlement.
+
+Payer and merchant devices
+
+Offline transactions are recorded
+
+Sync Service
+
+Connectivity returns · pending transactions enter the queue
+
+Fraud Service — hard security checks
+
+Signature, expiry, spending cap, duplicate IDs and reservation validity
+
+ML risk assessment
+
+CatBoost predicts a fraud-risk score and returns reason codes
+
+Low risk
+
+Eligible to continue to settlement
+
+High risk
+
+Hold for review or apply risk policy
+
+Illustrative architecture. The AI result should not override mandatory security failures.
+
+### Features your model should learn from
+
+The crucial point is that your model needs features available at settlement time. You cannot assume the backend knows everything that happened while the devices were disconnected.
+
+| Feature                        | Example                                                |
+| ------------------------------ | ------------------------------------------------------ |
+| `amount`                       | Transaction amount                                     |
+| `offline_duration_minutes`     | Time between authorization and synchronization         |
+| `transactions_since_last_sync` | Number of pending transactions                         |
+| `token_spend_ratio`            | Cumulative claimed spend ÷ token limit                 |
+| `token_reuse_count`            | Number of times the same token is presented            |
+| `transactions_last_5m`         | Recent transaction velocity, where observable          |
+| `amount_deviation`             | Difference from the user's historical spending pattern |
+| `settlement_delay`             | Delay between transaction creation and backend receipt |
+| `signature_valid`              | Result of cryptographic validation                     |
+| `reservation_valid`            | Whether the reservation exists and is valid            |
+
+Use the last two as hard security checks, not merely features the AI can learn to ignore.
+
+Also distinguish a repeated submission of the same transaction ID from two different transactions that claim the same token. Idempotency handles the former; token-level cumulative spending and conflict detection are needed for the latter.
+
+## 4. How do you measure accuracy properly?
+
+Do not use accuracy as your headline metric. In the ULB dataset, only 0.172% of transactions are fraudulent. A model that labels every transaction legitimate would achieve roughly 99.83% accuracy while detecting zero fraud cases.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://www.kaggle.com\&sz=32)
+
+Kaggle
+
++1
+
+
+
+Track these metrics:
+
+- Precision: Of the transactions flagged, how many were actually fraudulent?
+- Recall: Of all fraudulent transactions, how many did the model catch?
+- PR-AUC / Average Precision: How well does it rank rare fraud cases?
+- False-positive rate: How often does it flag legitimate payments?
+- Recall at a fixed false-positive rate: How much fraud can it detect within an acceptable operational burden?
+- Inference latency: How much time does the model add to settlement?
+- Calibration: Does a predicted 0.8 risk score correspond to an approximately 80% fraud rate in comparable cases?
+
+You should also compare the AI against your existing rule-based fraud service, not just against a model that makes random predictions.
+
+### A defensible evaluation protocol
+
+1. Split by time. Train on earlier transactions, tune thresholds on a later validation period, and evaluate once on a held-out future period. Avoid leakage from future transactions or derived features.
+
+2. Preserve the fraud imbalance. You can use class weighting during training, but evaluate on a test set that retains realistic class proportions. CatBoost supports class weighting for imbalanced classification.&#x20;
+
+   [image](https://www.google.com/s2/favicons?domain=https://catboost.ai\&sz=32)
+
+   CatBoost
+
+   +1
+
+3. Compare two systems. Run the existing rules alone, then rules plus ML, on exactly the same held-out transactions.
+
+4. Choose a threshold based on cost. A false positive can delay a legitimate payment; a false negative can permit a fraudulent settlement. Document how you balance those costs.
+
+5. Run shadow mode first. Generate scores without allowing the model to affect settlement. Inspect false positives and failures before using the score to hold transactions.
+
+## 5. But how can you evaluate your offline-specific fraud detection?
+
+This is where your project can stand out.
+
+A card-fraud dataset cannot directly validate detection of token reuse, offline spending-limit violations or delayed synchronization. For that, build a small, explicitly labeled offline-payment evaluation dataset.
+
+You can generate legitimate and adversarial scenarios from your own transaction simulator, such as:
+
+- A valid token used once within its spending limit.
+- A transaction synchronized after a long period offline.
+- The same transaction submitted repeatedly.
+- Two different transactions claiming the same token.
+- Cumulative spending that exceeds the token limit.
+- An unusual burst of transactions just before synchronization.
+- A transaction with an impossible timestamp or expired authorization.
+- A high-value transaction inconsistent with the user's normal behavior.
+
+Generate legitimate cases as well as attacks. Otherwise, the model learns that every unusual-looking transaction is fraudulent.
+
+Important distinction: synthetic test scenarios demonstrate that your pipeline handles known cases; they do not establish real-world fraud-detection accuracy. Test the general fraud-classification capability on real public data, and test offline-payment-specific rules and risk scenarios separately. Do not combine incompatible feature schemas and present the result as one validated model.
+
+## 6. My recommended implementation plan
+
+Phase 1 — Real-data benchmark
+
+Download ULB first. Train CatBoost or XGBoost and compare it with a simple baseline. Add IEEE-CIS if you have enough compute and time.
+
+Phase 2 — Offline-specific model
+
+Create a labeled dataset using your offline transaction simulator and the features available to the backend at synchronization. Document which cases are simulated.
+
+Phase 3 — Integrate with Spring Boot
+
+Have the Fraud Service send a structured feature payload to FastAPI. Return a risk score, model version and reason codes. Persist each assessment with the transaction ID and use the result in the settlement policy.
+
+Phase 4 — Publish reproducible results
+
+Report precision, recall, PR-AUC, false-positive rate, latency, and the improvement over rules alone. Include a confusion matrix, dataset citations, the evaluation split and known limitations.
+
+## My final recommendation
+
+For OfflinePay AI, use CatBoost + FastAPI + your existing Spring Boot Fraud Service, and use the ULB dataset as your first real-data benchmark. Add offline-specific synthetic scenarios to test the behavior that public datasets do not cover.
+
+You do not need a pretrained model to make this technically credible. A carefully evaluated model with transparent limitations is more convincing than a fine-tuned model whose data does not match the problem.
+
+One last distinction for your Devpost submission: say that the model assesses fraud risk before settlement rather than claiming it prevents every offline fraud attempt. Since the AI runs after connectivity returns, it cannot retroactively prevent a merchant from handing over goods during the original offline transaction.

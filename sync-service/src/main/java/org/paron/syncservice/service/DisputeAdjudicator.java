@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.paron.syncservice.client.TokenServiceClient;
 import org.paron.syncservice.dto.TokenSpendState;
 import org.paron.syncservice.dto.adjudicate.AdjudicateRequest;
+import org.paron.syncservice.dto.adjudicate.AdjudicationAction;
 import org.paron.syncservice.dto.adjudicate.AdjudicationResponse;
 import org.paron.syncservice.dto.adjudicate.EvidenceCheck;
 import org.paron.syncservice.model.OfflineTransaction;
@@ -20,40 +21,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/*
- * The "AI judge" — autonomous dispute triaging.
- *
- * When two offline receipts contradict each other after reconnection (a
- * merchant claims ₹200, the customer's device says it already paid; or the
- * same token was spent from two devices), this component arbitrates who
- * holds the valid claim. It works like a real judge's clerk:
- *
- *   1. GATHER EVIDENCE  — load both receipts, re-verify their signatures
- *                         (cryptographic proof of who really created them),
- *                         check each one's settlement status, and pull the
- *                         token's authoritative spend state from token-service.
- *   2. APPLY THE RULES  — a small deterministic rule tree maps the evidence
- *                         to a binding ruling. This is deliberate: money
- *                         decisions must never be a coin flip or an LLM
- *                         hallucination. The LLM may only write the
- *                         human-readable summary, never decide.
- *   3. ISSUE A VERDICT  — structured judgement card with per-check evidence
- *                         and confidence, so every ruling is auditable.
- *
- * The rules (priority order):
- *   - receipts must reference the SAME token            -> else INSUFFICIENT
- *   - a receipt failing signature check is a FORGED     -> FORGED_RECEIPT
- *   - identical amount + same device + same timestamp   -> SINGLE_PAYMENT
- *   - both settled AND token over its cap               -> DOUBLE_SPEND,
- *     the earlier payment wins, the later one is reclaimed
- *   - both settled and within cap                       -> MULTIPLE_LEGITIMATE
- *   - only one settled -> the settled receipt wins      -> SINGLE_PAYMENT
- */
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class DisputeAdjudicator {
-
     private final OfflineTransactionRepository transactionRepository;
     private final SignatureVerifier signatureVerifier;
     private final TokenServiceClient tokenServiceClient;
@@ -61,80 +32,50 @@ public class DisputeAdjudicator {
 
     public AdjudicationResponse adjudicate(AdjudicateRequest request) {
         String disputeId = UUID.randomUUID().toString();
-
         List<OfflineTransaction> receipts = new ArrayList<>();
         for (String id : request.getDeviceTransactionIds()) {
             transactionRepository.findByDeviceTransactionId(id).ifPresent(receipts::add);
         }
-
         if (receipts.size() != 2) {
             return insufficient(disputeId, receipts.size(), request.getDeviceTransactionIds());
         }
-
         OfflineTransaction a = receipts.get(0);
         OfflineTransaction b = receipts.get(1);
         List<EvidenceCheck> evidence = new ArrayList<>();
-
-        // ── 1. GATHER EVIDENCE ──────────────────────────────────────────
         boolean sigA = signatureVerifier.isValid(a);
-        evidence.add(EvidenceCheck.builder()
-                .check("SIGNATURE_TXN_A")
-                .passed(sigA)
-                .detail(a.getDeviceTransactionId() + (sigA ? " signature verified" : " signature INVALID — forged or tampered"))
-                .build());
+        evidence.add(EvidenceCheck.builder().check("SIGNATURE_TXN_A").passed(sigA)
+                .detail(a.getDeviceTransactionId() + (sigA ? " signature verified" : " signature INVALID")).build());
         boolean sigB = signatureVerifier.isValid(b);
-        evidence.add(EvidenceCheck.builder()
-                .check("SIGNATURE_TXN_B")
-                .passed(sigB)
-                .detail(b.getDeviceTransactionId() + (sigB ? " signature verified" : " signature INVALID — forged or tampered"))
-                .build());
-
+        evidence.add(EvidenceCheck.builder().check("SIGNATURE_TXN_B").passed(sigB)
+                .detail(b.getDeviceTransactionId() + (sigB ? " signature verified" : " signature INVALID")).build());
         boolean settledA = a.getStatus() == TransactionStatus.SETTLED;
         boolean settledB = b.getStatus() == TransactionStatus.SETTLED;
-        evidence.add(EvidenceCheck.builder().check("SETTLED_TXN_A").passed(settledA)
-                .detail("status=" + a.getStatus()).build());
-        evidence.add(EvidenceCheck.builder().check("SETTLED_TXN_B").passed(settledB)
-                .detail("status=" + b.getStatus()).build());
-
+        evidence.add(EvidenceCheck.builder().check("SETTLED_TXN_A").passed(settledA).detail("status=" + a.getStatus()).build());
+        evidence.add(EvidenceCheck.builder().check("SETTLED_TXN_B").passed(settledB).detail("status=" + b.getStatus()).build());
         boolean sameToken = same(a.getOfflineToken(), b.getOfflineToken());
         evidence.add(EvidenceCheck.builder().check("SAME_TOKEN").passed(sameToken)
-                .detail(sameToken ? "both receipts reference the same offline token"
-                        : "receipts reference different tokens — not comparable")
-                .build());
-
+                .detail(sameToken ? "same token" : "different tokens").build());
         TokenSpendState tokenState = null;
         String token = a.getOfflineToken();
         if (sameToken) {
             try {
                 tokenState = tokenServiceClient.getSpendState(token);
             } catch (Exception e) {
-                log.warn("Token-state evidence unavailable for dispute {}. error={}", disputeId, e.getMessage());
+                log.warn("Token-state unavailable for {}: {}", disputeId, e.getMessage());
             }
         }
         boolean tokenConnective = tokenState != null;
         evidence.add(EvidenceCheck.builder().check("TOKEN_STATE_AVAILABLE").passed(tokenConnective)
-                .detail(tokenState != null
-                        ? "spent=" + tokenState.getSpentAmount() + ", cap=" + tokenState.getMaxAmount() + ", status=" + tokenState.getStatus()
-                        : "token-service /state unavailable").build());
-
-        boolean overspent = tokenState != null
-                && tokenState.getSpentAmount() != null
-                && tokenState.getMaxAmount() != null
+                .detail(tokenState != null ? "spent=" + tokenState.getSpentAmount() + ", cap=" + tokenState.getMaxAmount() : "unavailable").build());
+        boolean overspent = tokenState != null && tokenState.getSpentAmount() != null && tokenState.getMaxAmount() != null
                 && tokenState.getSpentAmount().compareTo(tokenState.getMaxAmount()) > 0;
-        evidence.add(EvidenceCheck.builder().check("TOKEN_OVER_CAP").passed(overspent)
-                .detail(overspent ? "jointly spent MORE than the reserved cap — at least one claim is dishonest"
-                        : "spend is within the reserved cap").build());
-
+        evidence.add(EvidenceCheck.builder().check("TOKEN_OVER_CAP").passed(overspent).detail(overspent ? "overspent" : "within cap").build());
         boolean sameDevice = same(a.getDeviceId(), b.getDeviceId());
-        boolean sameAmount = a.getAmount() != null && a.getAmount().compareTo(b.getAmount()) == 0;
-        boolean sameMoment = a.getTransactedAt() != null && b.getTransactedAt() != null
-                && Math.abs(ChronoUnit.SECONDS.between(a.getTransactedAt(), b.getTransactedAt())) <= 2;
-
-        // ── 2. APPLY THE RULES ─────────────────────────────────────────
+        boolean sameAmount = a.getAmount() != null && b.getAmount() != null && a.getAmount().compareTo(b.getAmount()) == 0;
+        boolean sameMoment = a.getTransactedAt() != null && b.getTransactedAt() != null && Math.abs(ChronoUnit.SECONDS.between(a.getTransactedAt(), b.getTransactedAt())) <= 2;
         String ruling;
         String winner = null;
         String loser = null;
-
         if (!sameToken || !tokenConnective) {
             ruling = "INSUFFICIENT_EVIDENCE";
         } else if (!sigA || !sigB) {
@@ -143,14 +84,12 @@ public class DisputeAdjudicator {
             if (!sigA && sigB) { winner = b.getDeviceTransactionId(); loser = a.getDeviceTransactionId(); }
         } else if (sameDevice && sameAmount && sameMoment) {
             ruling = "SINGLE_PAYMENT";
-            winner = a.getDeviceTransactionId();
-            loser = b.getDeviceTransactionId();
+            winner = a.getDeviceTransactionId(); loser = b.getDeviceTransactionId();
         } else if (settledA && settledB && overspent) {
             ruling = "DOUBLE_SPEND";
             OfflineTransaction earlier = sameMoment ? a : (a.getTransactedAt().isBefore(b.getTransactedAt()) ? a : b);
             OfflineTransaction later = earlier == a ? b : a;
-            winner = earlier.getDeviceTransactionId();
-            loser = later.getDeviceTransactionId();
+            winner = earlier.getDeviceTransactionId(); loser = later.getDeviceTransactionId();
         } else if (settledA && settledB) {
             ruling = "MULTIPLE_LEGITIMATE";
         } else if (settledA != settledB) {
@@ -160,16 +99,10 @@ public class DisputeAdjudicator {
         } else {
             ruling = "INSUFFICIENT_EVIDENCE";
         }
-
-        // ── 3. ISSUE THE VERDICT ───────────────────────────────────────
         double confidence = clamp01((double) evidence.stream().filter(EvidenceCheck::isPassed).count() / evidence.size());
         BigDecimal amountInQuestion = sumAmounts(a, b);
-
         String summary = reasoner.summarize(ruling, winner, evidence);
-
-        log.info("Adjudication complete. disputeId={}, ruling={}, winner={}, confidence={}",
-                disputeId, ruling, winner, confidence);
-
+        log.info("Adjudication {} ruling={} winner={}", disputeId, ruling, winner);
         return AdjudicationResponse.builder()
                 .disputeId(disputeId)
                 .ruling(ruling)
@@ -179,41 +112,44 @@ public class DisputeAdjudicator {
                 .confidence(confidence)
                 .evidence(evidence)
                 .summary(summary)
+                .actions(buildActions(ruling, winner, loser, a, b))
                 .binding(!"INSUFFICIENT_EVIDENCE".equals(ruling))
                 .adjudicatedAt(LocalDateTime.now())
                 .build();
     }
 
+    private List<AdjudicationAction> buildActions(String ruling, String winner, String loser, OfflineTransaction a, OfflineTransaction b) {
+        List<AdjudicationAction> actions = new ArrayList<>();
+        if ("DOUBLE_SPEND".equals(ruling) || "FORGED_RECEIPT".equals(ruling)) {
+            if (loser != null) actions.add(AdjudicationAction.builder().type("REJECT_LOSER").transactionId(loser).detail(ruling).build());
+            if (winner != null) actions.add(AdjudicationAction.builder().type("SETTLE_WINNER").transactionId(winner).detail(ruling).build());
+        } else if ("SINGLE_PAYMENT".equals(ruling)) {
+            if (loser != null) actions.add(AdjudicationAction.builder().type("REJECT_DUPLICATE").transactionId(loser).detail("Duplicate").build());
+        } else if ("MULTIPLE_LEGITIMATE".equals(ruling)) {
+            actions.add(AdjudicationAction.builder().type("HOLD_REVIEW").transactionId(a.getDeviceTransactionId()).build());
+            actions.add(AdjudicationAction.builder().type("HOLD_REVIEW").transactionId(b.getDeviceTransactionId()).build());
+        }
+        return actions;
+    }
+
     private AdjudicationResponse insufficient(String disputeId, int found, List<String> requested) {
-        double confidence = found > 0 ? 0.25 : 0.0;
         return AdjudicationResponse.builder()
                 .disputeId(disputeId)
                 .ruling("INSUFFICIENT_EVIDENCE")
                 .amountInQuestion(BigDecimal.ZERO)
-                .confidence(confidence)
-                .evidence(List.of(EvidenceCheck.builder()
-                        .check("RECEIPTS_FOUND")
-                        .passed(false)
-                        .detail("loaded " + found + "/" + requested.size() + " receipts: " + requested)
-                        .build()))
-                .summary("The judge could not rule: the receipts could not both be loaded for verification. No money is moved and no claim is granted.")
+                .confidence(found > 0 ? 0.25 : 0.0)
+                .evidence(List.of(EvidenceCheck.builder().check("RECEIPTS_FOUND").passed(false).detail("loaded " + found).build()))
+                .summary("Insufficient evidence")
                 .binding(false)
                 .adjudicatedAt(LocalDateTime.now())
                 .build();
     }
-
     private BigDecimal sumAmounts(OfflineTransaction a, OfflineTransaction b) {
         BigDecimal sum = BigDecimal.ZERO;
         if (a.getAmount() != null) sum = sum.add(a.getAmount());
         if (b.getAmount() != null) sum = sum.add(b.getAmount());
         return sum;
     }
-
-    private boolean same(String x, String y) {
-        return x != null && x.equals(y);
-    }
-
-    private double clamp01(double value) {
-        return Math.max(0, Math.min(1, value));
-    }
+    private boolean same(String x, String y) { return x != null && x.equals(y); }
+    private double clamp01(double value) { return Math.max(0, Math.min(1, value)); }
 }

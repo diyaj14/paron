@@ -64,6 +64,7 @@ public class TokenService {
         //a placeholder fpr uuid replaced by jwt later
         TokenRecord record = TokenRecord.builder()
                 .userId(request.getUserId())
+                .deviceId(request.getDeviceId())
                 .reservationId(reservationId)
                 .tokenValue("PENDING")          // placeholder — replaced in next step
                 .maxAmount(request.getAmount())
@@ -78,6 +79,7 @@ public class TokenService {
                 request.getUserId(),
                 record.getId(),
                 reservationId,
+                request.getDeviceId(),
                 request.getAmount(),
                 expiresAt
         );
@@ -92,6 +94,7 @@ public class TokenService {
                 .tokenId(record.getId())
                 .token(jwt)                     // ← this gets stored on the device
                 .userId(request.getUserId())
+                .deviceId(request.getDeviceId())
                 .maxAmount(request.getAmount())
                 .issuedAt(record.getCreatedAt())
                 .expiresAt(expiresAt)
@@ -104,12 +107,15 @@ public class TokenService {
     /*
      * Validates an offline spending token.
      *
-     * Two-layer check:
+     * Three-layer check:
      *  Layer 1 — Cryptographic: is the JWT signature valid? (JwtUtil)
      *  Layer 2 — Business:      is the DB record ACTIVE and not overspent?
+     *  Layer 3 — Identity:      is the token being presented by the device
+     *                           it was issued to?
      *
-     * Both must pass. A valid JWT from a token that was already USED
-     * (e.g. a replay attack) will fail Layer 2.
+     * All must pass. A valid JWT from a token that was already USED
+     * (e.g. a replay attack) will fail Layer 2; one presented from a
+     * different device fails Layer 3.
      */
 
     public ValidateTokenResponse validate(ValidateTokenRequest request) {
@@ -138,6 +144,20 @@ public class TokenService {
             return ValidateTokenResponse.builder()
                     .valid(false)
                     .reason("TOKEN_STATUS_" + record.getStatus().name())
+                    .build();
+        }
+        // ── Layer 3: Device binding
+        // The token is bound to the device it was issued to. If the caller
+        // says which device is presenting it, that must be the bound device.
+        // (A null on either side means "unbound"/not supplied — allow it so
+        // tokens issued before device binding still validate.)
+        if (request.getDeviceId() != null && record.getDeviceId() != null
+                && !record.getDeviceId().equals(request.getDeviceId())) {
+            log.warn("Token presented from a different device. tokenId={}, boundDevice={}, presentedDevice={}",
+                    record.getId(), record.getDeviceId(), request.getDeviceId());
+            return ValidateTokenResponse.builder()
+                    .valid(false)
+                    .reason("DEVICE_MISMATCH")
                     .build();
         }
         // Cumulative spend (already settled on this token + this payment)
@@ -219,6 +239,7 @@ public class TokenService {
                         .tokenId(record.getId())
                         .token(null)                // never return raw JWT in history
                         .userId(record.getUserId())
+                        .deviceId(record.getDeviceId())
                         .maxAmount(record.getMaxAmount())
                         .issuedAt(record.getCreatedAt())
                         .expiresAt(record.getExpiresAt())

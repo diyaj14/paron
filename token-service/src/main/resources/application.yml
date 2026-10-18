@@ -5,6 +5,13 @@ spring:
   application:
     name: token-service
 
+  # Load SUPABASE_* from the repo .env (spring-dotenv 4.0.0 is broken on Boot 4).
+  # Two candidates: repo root (./.env) and token-service/ for mvn spring-boot:run (../.env).
+  config:
+    import:
+      - "optional:file:./.env[.properties]"
+      - "optional:file:../.env[.properties]"
+
   # ─── Supabase PostgreSQL connection ───────────────────────────────────────
   # Replace the placeholders below with your actual Supabase values.
   # Go to: Supabase Dashboard → Your Project → Settings → Database → URI

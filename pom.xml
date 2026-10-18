@@ -25,6 +25,7 @@
         <module>sync-service</module>
         <module>fraud-service</module>
         <module>api-gateway</module>
+        <module>paypal-funding-service</module>
     </modules>
 
 </project>

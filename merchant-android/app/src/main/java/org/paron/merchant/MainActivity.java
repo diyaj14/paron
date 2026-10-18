@@ -223,6 +223,12 @@ public class MainActivity extends Activity {
         if (!"paron-ble-v1".equals(offer.optString("protocolVersion")) || !"PAYMENT_OFFER".equals(offer.optString("type")) || id.isEmpty() || hash.isEmpty()) { sendReceipt(device, rejected(id, hash, "Unsupported payment offer.")); return; }
         String configuredMerchant = merchantIdInput.getText().toString().trim();
         if (!configuredMerchant.equals(transaction.optString("merchantId"))) { sendReceipt(device, rejected(id, hash, "Merchant ID does not match this receiver.")); return; }
+        String token = transaction.optString("offlineToken");
+        if (token.isEmpty()) { sendReceipt(device, rejected(id, hash, "Missing offline token.")); return; }
+        if (transaction.optString("signature").isEmpty() || transaction.optString("deviceId").isEmpty()) {
+          sendReceipt(device, rejected(id, hash, "Unsigned or unbound payment receipt.")); return;
+        }
+        if (amount <= 0) { sendReceipt(device, rejected(id, hash, "Payment details are incomplete.")); return; }
         double amount = transaction.optDouble("amount", 0); if (amount <= 0 || transaction.optString("offlineToken").isEmpty()) { sendReceipt(device, rejected(id, hash, "Payment details are incomplete.")); return; }
         JSONObject receipt = new JSONObject(); receipt.put("type", "PAYMENT_ACCEPTED"); receipt.put("deviceTransactionId", id); receipt.put("payloadHash", hash); receipt.put("merchantReceiptId", "mrc-" + UUID.randomUUID()); receipt.put("receivedAt", Instant.now().toString());
         sendReceipt(device, receipt);
@@ -232,3 +238,4 @@ public class MainActivity extends Activity {
     private void sendReceipt(BluetoothDevice device, JSONObject receipt) { if (gattServer == null || receiptCharacteristic == null) return; receiptCharacteristic.setValue(receipt.toString().getBytes(StandardCharsets.UTF_8)); gattServer.notifyCharacteristicChanged(device, receiptCharacteristic, false); }
     private static class FrameBuffer { final int total; final String[] frames; FrameBuffer(int total) { this.total = total; this.frames = new String[total]; } boolean complete() { for (String frame : frames) if (frame == null) return false; return true; } String join() { StringBuilder joined = new StringBuilder(); for (String frame : frames) joined.append(frame); return joined.toString(); } }
 }
+

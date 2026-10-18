@@ -38,7 +38,7 @@ public class SettlementProcessor implements ItemProcessor<OfflineTransaction,Set
             return null;
         }
         try{
-            TokenValidationResult tokenResult =tokenServiceClient.validateToken(transaction.getOfflineToken(),transaction.getAmount());
+            TokenValidationResult tokenResult =tokenServiceClient.validateToken(transaction.getOfflineToken(),transaction.getAmount(),transaction.getDeviceId());
             if(!tokenResult.isValid()){
                 log.warn("Token validation failed. reason={}, deviceTransactionId={}",
                         tokenResult.getReason(), transaction.getDeviceTransactionId());

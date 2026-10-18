@@ -27,18 +27,22 @@ public class TokenServiceClient {
     private String tokenServiceUrl;
 
     @Retry(name="tokenService")
-    public TokenValidationResult validateToken(String token, BigDecimal spentAmount){
+    public TokenValidationResult validateToken(String token, BigDecimal spentAmount, String deviceId){
         String url = tokenServiceUrl + "/api/v1/tokens/validate";
 
-        Map<String,Object> body = Map.of(
-                "token",token,
-                "spentAmount",spentAmount
-        );
+        Map<String,Object> body = new java.util.HashMap<>();
+        body.put("token", token);
+        body.put("spentAmount", spentAmount);
+        // Present the device that made the payment so token-service can enforce
+        // the token's device binding (a token spent from another device is rejected).
+        if (deviceId != null) {
+            body.put("deviceId", deviceId);
+        }
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<Map<String,Object>> requestEntity = new HttpEntity<>(body,headers);
 
-        log.info("Validating token with token-service. spentAmount={}", spentAmount);
+        log.info("Validating token with token-service. spentAmount={}, deviceId={}", spentAmount, deviceId);
         return restTemplate.postForObject(url, requestEntity, TokenValidationResult.class);
     }
     @Retry(name = "tokenService")

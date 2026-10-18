@@ -48,6 +48,7 @@ public class SettlementProcessorTest {
                 .offlineToken("eyJfaketoken")
                 .amount(new BigDecimal("150.00"))
                 .merchantId("merchant_abc")
+                .deviceId("device-001")
                 .transactedAt(LocalDateTime.now())
                 .status(TransactionStatus.RECEIVED)
                 .build();
@@ -61,13 +62,13 @@ public class SettlementProcessorTest {
         SettlementContext result = settlementProcessor.process(transaction);
 
         assertThat(result).isNull();
-        verify(tokenServiceClient, never()).validateToken(any(), any());
+        verify(tokenServiceClient, never()).validateToken(any(), any(), any());
     }
 
     @Test
     void process_whenToken_Invalid_shouldReject(){
         when(idempotencyService.markAsProcessed("device-txn-001")).thenReturn(true);
-        when(tokenServiceClient.validateToken(anyString(), any(BigDecimal.class)))
+        when(tokenServiceClient.validateToken(anyString(), any(BigDecimal.class), any()))
                 .thenReturn(TokenValidationResult.builder()
                         .valid(false)
                         .reason("EXPIREDJWTEXCEPTION")
@@ -87,7 +88,7 @@ public class SettlementProcessorTest {
     @Test
     void process_whenFraudRejects_shouldReject(){
         when(idempotencyService.markAsProcessed("device-txn-001")).thenReturn(true);
-        when(tokenServiceClient.validateToken(anyString(), any(BigDecimal.class)))
+        when(tokenServiceClient.validateToken(anyString(), any(BigDecimal.class), any()))
                 .thenReturn(TokenValidationResult.builder()
                         .valid(true)
                         .userId("user_test_123")
@@ -112,7 +113,7 @@ public class SettlementProcessorTest {
     @Test
     void process_whenFraudHolds_shouldHoldForReview(){
         when(idempotencyService.markAsProcessed("device-txn-001")).thenReturn(true);
-        when(tokenServiceClient.validateToken(anyString(), any(BigDecimal.class)))
+        when(tokenServiceClient.validateToken(anyString(), any(BigDecimal.class), any()))
                 .thenReturn(TokenValidationResult.builder()
                         .valid(true)
                         .userId("user_test_123")
@@ -142,7 +143,7 @@ public class SettlementProcessorTest {
     @Test
     void process_whenModelUnavailable_shouldHoldForReview(){
         when(idempotencyService.markAsProcessed("device-txn-001")).thenReturn(true);
-        when(tokenServiceClient.validateToken(anyString(), any(BigDecimal.class)))
+        when(tokenServiceClient.validateToken(anyString(), any(BigDecimal.class), any()))
                 .thenReturn(TokenValidationResult.builder()
                         .valid(true)
                         .userId("user_test_123")
@@ -166,7 +167,7 @@ public class SettlementProcessorTest {
     @Test
     void process_whenAllChecksPass_shouldApprovewithReservationId(){
         when(idempotencyService.markAsProcessed("device-txn-001")).thenReturn(true);
-        when(tokenServiceClient.validateToken(anyString(), any(BigDecimal.class)))
+        when(tokenServiceClient.validateToken(anyString(), any(BigDecimal.class), any()))
                 .thenReturn(TokenValidationResult.builder()
                         .valid(true)
                         .userId("user_test_123")
