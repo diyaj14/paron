@@ -27,7 +27,6 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from joblib import dump
@@ -59,23 +58,65 @@ FEATURE_NAMES = [
     "expiry_known",
 ]
 
-MODEL_VERSION = "lr-calibrated-v1.0.0"
+MODEL_VERSION = "lr-calibrated-v2.0.0-scenario"
 FEATURE_SCHEMA_VERSION = "v1"
 THRESHOLD_POLICY_VERSION = "thresholds-v1"
 
 
-def load_and_split(csv_path: str, seed: int):
-    df = pd.read_csv(csv_path)
-    X = df[FEATURE_NAMES].values
-    y = df["label"].values
+def load_and_split(csv_path: str):
+    """Make a chronological, group-safe split.
 
-    X_train, X_temp, y_train, y_temp = train_test_split(
-        X, y, test_size=0.4, random_state=seed, stratify=y
+    Every offline-payment sequence belongs to exactly one split.  This avoids
+    learning from an earlier event in a sequence and evaluating on a later
+    event from that same sequence.  We train only rows which passed mandatory
+    security rules: the model must never learn to replace deterministic gates.
+    """
+    df = pd.read_csv(csv_path)
+    required = set(FEATURE_NAMES + ["label", "event_time", "sequence_id", "ml_eligible"])
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Scenario dataset missing required columns: {sorted(missing)}")
+
+    eligible = df[df["ml_eligible"] == 1].copy()
+    if eligible.empty:
+        raise ValueError("No ML-eligible records. Mandatory-rule rejects must not enter model training.")
+
+    # Each sequence has a monotonic event time.  Split by the first event so a
+    # sequence can never straddle train/validation/test.
+    sequence_order = (
+        eligible.groupby("sequence_id", as_index=False)["event_time"]
+        .min()
+        .sort_values(["event_time", "sequence_id"])
+        .reset_index(drop=True)
     )
-    X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, test_size=0.5, random_state=seed, stratify=y_temp
-    )
-    return X_train, X_val, X_test, y_train, y_val, y_test, len(df)
+    n_sequences = len(sequence_order)
+    if n_sequences < 10:
+        raise ValueError("Need at least 10 sequences for chronological train/validation/test splitting.")
+    train_end = max(1, int(n_sequences * 0.60))
+    val_end = max(train_end + 1, int(n_sequences * 0.80))
+    val_end = min(val_end, n_sequences - 1)
+    train_ids = set(sequence_order.iloc[:train_end]["sequence_id"])
+    val_ids = set(sequence_order.iloc[train_end:val_end]["sequence_id"])
+    test_ids = set(sequence_order.iloc[val_end:]["sequence_id"])
+
+    def arrays(ids):
+        part = eligible[eligible["sequence_id"].isin(ids)].sort_values("event_time")
+        return part[FEATURE_NAMES].values, part["label"].values
+
+    X_train, y_train = arrays(train_ids)
+    X_val, y_val = arrays(val_ids)
+    X_test, y_test = arrays(test_ids)
+    for name, labels in (("train", y_train), ("validation", y_val), ("test", y_test)):
+        if len(np.unique(labels)) < 2:
+            raise ValueError(f"{name} split has one class; regenerate a larger/more diverse scenario dataset.")
+    split_info = {
+        "strategy": "chronological_sequence_group_split",
+        "total_records": int(len(df)),
+        "ml_eligible_records": int(len(eligible)),
+        "mandatory_rule_records_excluded": int(len(df) - len(eligible)),
+        "sequence_counts": {"train": len(train_ids), "validation": len(val_ids), "test": len(test_ids)},
+    }
+    return X_train, X_val, X_test, y_train, y_val, y_test, split_info
 
 
 def train_model(X_train, y_train, seed: int):
@@ -175,9 +216,7 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    X_train, X_val, X_test, y_train, y_val, y_test, n_total = load_and_split(
-        args.data, args.seed
-    )
+    X_train, X_val, X_test, y_train, y_val, y_test, split_info = load_and_split(args.data)
 
     model = train_model(X_train, y_train, args.seed)
 
@@ -201,7 +240,10 @@ def main():
         "feature_schema_version": FEATURE_SCHEMA_VERSION,
         "threshold_policy_version": THRESHOLD_POLICY_VERSION,
         "seed": args.seed,
-        "total_records": n_total,
+        "total_records": split_info["total_records"],
+        "ml_eligible_records": split_info["ml_eligible_records"],
+        "mandatory_rule_records_excluded": split_info["mandatory_rule_records_excluded"],
+        "split": split_info,
         "train_count": int(len(y_train)),
         "val_count": int(len(y_val)),
         "test_count": int(len(y_test)),
@@ -213,7 +255,7 @@ def main():
     with open(out_dir / "manifest.json", "w") as f:
         json.dump(manifest, f, indent=2)
 
-    print(f"Model: {MODEL_VERSION}")
+    print(f"Model: {MODEL_VERSION} (chronological, sequence-safe split)")
     print(f"Threshold: {threshold}")
     print(f"AI   — PR-AUC: {test_metrics['pr_auc']}, F1: {test_metrics['f1']}, FP cost: INR {test_metrics['false_positive_rupee_cost']}")
     print(f"Rules — PR-AUC: {baseline['pr_auc']}, F1: {baseline['f1']}, FP cost: INR {baseline['false_positive_rupee_cost']}")

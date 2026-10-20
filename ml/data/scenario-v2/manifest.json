@@ -1,0 +1,94 @@
+{
+  "generator_version": "2.0.0-scenario-sequences",
+  "seed": 42,
+  "total_records": 12000,
+  "feature_schema_version": "v1",
+  "feature_names": [
+    "amount",
+    "amount_to_token_limit_ratio",
+    "merchant_amount_deviation",
+    "user_tx_count_5m",
+    "user_tx_count_1h",
+    "user_tx_count_24h",
+    "device_tx_count_5m",
+    "device_tx_count_1h",
+    "device_tx_count_24h",
+    "token_tx_count_24h",
+    "user_tx_value_1h",
+    "device_tx_value_24h",
+    "token_age_seconds",
+    "time_to_expiry_seconds",
+    "offline_duration_seconds",
+    "token_reuse_count",
+    "duplicate_payload_hash_count",
+    "previous_settlement_failed",
+    "merchant_risk_aggregate",
+    "hour_of_day",
+    "day_of_week",
+    "history_available",
+    "token_age_known",
+    "expiry_known"
+  ],
+  "scenario_definitions": {
+    "student_canteen_day": {
+      "label": 0,
+      "rule": "PASS",
+      "policy": "APPROVE",
+      "why": "Several small, routine payments."
+    },
+    "offline_commute": {
+      "label": 0,
+      "rule": "PASS",
+      "policy": "APPROVE",
+      "why": "Valid payments synchronize after a normal long offline period."
+    },
+    "large_legitimate_purchase": {
+      "label": 0,
+      "rule": "PASS",
+      "policy": "HOLD_FOR_REVIEW",
+      "why": "Unusual but valid high-value purchase."
+    },
+    "new_device_low_signal": {
+      "label": 0,
+      "rule": "PASS",
+      "policy": "HOLD_FOR_REVIEW",
+      "why": "Legitimate payment with insufficient history."
+    },
+    "campus_event_legitimate": {
+      "label": 0,
+      "rule": "PASS",
+      "policy": "HOLD_FOR_REVIEW",
+      "why": "A legitimate event creates high but explainable payment velocity."
+    },
+    "below_threshold_velocity": {
+      "label": 1,
+      "rule": "PASS",
+      "policy": "HOLD_FOR_REVIEW",
+      "why": "Attacker stays below fixed rule thresholds but sequence is suspicious."
+    },
+    "cross_merchant_token_conflict": {
+      "label": 1,
+      "rule": "HARD_REJECT",
+      "policy": "REJECT",
+      "why": "Different claims reuse an offline token."
+    },
+    "tampered_receipt": {
+      "label": 1,
+      "rule": "HARD_REJECT",
+      "policy": "REJECT",
+      "why": "Signature/payload integrity failure represented for rule testing only."
+    }
+  },
+  "scenario_counts": {
+    "below_threshold_velocity": 1700,
+    "student_canteen_day": 2771,
+    "new_device_low_signal": 1294,
+    "tampered_receipt": 604,
+    "offline_commute": 1969,
+    "large_legitimate_purchase": 1315,
+    "campus_event_legitimate": 1530,
+    "cross_merchant_token_conflict": 817
+  },
+  "ml_eligible_count": 10579,
+  "limitation": "Simulated scenario labels only; not real-world fraud performance."
+}

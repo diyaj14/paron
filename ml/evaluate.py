@@ -109,13 +109,15 @@ def compute_metrics(y_true, y_prob, threshold, fp_cost_per=500.0):
 
 
 def hard_rule_hit(row):
-    """Mirror fraud-service rule stack: any hit forces a REJECT."""
+    """Mandatory rule gate represented by this feature schema.
+
+    Velocity and amount are useful ML/heuristic signals, not proof of fraud.
+    Token reuse and an integrity/payload conflict are deterministic failures
+    and must reject before an ML score is considered.
+    """
     return (
         row["token_reuse_count"] > 0
         or row["duplicate_payload_hash_count"] > 0
-        or row["user_tx_count_5m"] > 5
-        or row["amount_to_token_limit_ratio"] > 0.7
-        or row["merchant_amount_deviation"] > 2.0
     )
 
 
@@ -206,7 +208,8 @@ def main():
     parser.add_argument("--model", type=str, default="./artifacts/model.joblib")
     parser.add_argument("--holdout", type=str, default="./data/holdout/features.csv")
     parser.add_argument("--out-dir", type=str, default="./artifacts")
-    parser.add_argument("--threshold", type=float, default=0.22)
+    parser.add_argument("--threshold", type=float, default=None,
+                        help="ML fraud threshold; defaults to the adjacent training manifest")
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -214,13 +217,26 @@ def main():
 
     model = load(args.model)
     df = pd.read_csv(args.holdout)
-    X = df[FEATURE_NAMES].values
-    y = df["label"].values
+    required = set(FEATURE_NAMES + ["label", "ml_eligible"])
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Scenario holdout missing required columns: {sorted(missing)}")
+    eligible = df[df["ml_eligible"] == 1].copy()
+    if eligible.empty:
+        raise ValueError("Holdout has no ML-eligible rows")
+    X = eligible[FEATURE_NAMES].values
+    y = eligible["label"].values
+
+    if args.threshold is None:
+        manifest_path = Path(args.model).parent / "manifest.json"
+        if not manifest_path.exists():
+            raise ValueError("No --threshold supplied and model manifest.json is missing")
+        args.threshold = float(json.loads(manifest_path.read_text(encoding="utf-8"))["threshold"])
 
     y_prob = model.predict_proba(X)[:, 1]
     ai_metrics = compute_metrics(y, y_prob, args.threshold)
 
-    rule_scores = score_with_rules(df)
+    rule_scores = score_with_rules(eligible)
     rule_preds = (rule_scores >= 0.7).astype(int)
     tn, fp, fn, tp = confusion_matrix(y, rule_preds).ravel()
     rule_metrics = {
@@ -235,13 +251,25 @@ def main():
     }
 
     latency = latency_percentiles(model, X)
-    samples = sample_predictions(df, model, args.threshold, n=5)
-    prod_decision = simulate_production_decision(df, y_prob)
+    samples = sample_predictions(eligible, model, args.threshold, n=5)
+    # Do not score rule-rejected rows. The simulator verifies that those rows
+    # reach the deterministic reject path instead.
+    full_prob = np.full(len(df), np.nan)
+    full_prob[df["ml_eligible"].to_numpy() == 1] = y_prob
+    prod_decision = simulate_production_decision(df, full_prob)
+    hard_rows = df[df["ml_eligible"] == 0]
+    mandatory_gate = {
+        "records": int(len(hard_rows)),
+        "all_expected_hard_rejects_detected": bool(all(hard_rule_hit(row) for _, row in hard_rows.iterrows())),
+        "model_scored_hard_rejects": 0,
+    }
 
     evidence = {
-        "model_version": "lr-calibrated-v1.0.0",
+        "model_version": "lr-calibrated-v2.0.0-scenario",
         "feature_schema_version": "v1",
         "holdout_count": len(df),
+        "ml_eligible_holdout_count": len(eligible),
+        "mandatory_gate": mandatory_gate,
         "threshold": args.threshold,
         "ai_model": ai_metrics,
         "rules_baseline": rule_metrics,
@@ -261,7 +289,8 @@ def main():
         }],
         "reason_code_dictionary": REASON_CODE_MAP,
         "limitations": [
-            "Synthetic labels: generator-created fraud patterns, not real chargeback data",
+            "Synthetic scenario labels: useful for engineering validation, not evidence of real-world fraud performance",
+            "Scenario prevalence and behaviour are design assumptions; validate transfer to production with monitored real outcomes",
             "No merchant type/category in v1 features — AI lacks contextual merchant intelligence",
             "No device age or user account age — cannot detect newly registered suspicious accounts",
             "Threshold tuned on validation split; production threshold should be recalibrated on real data",
@@ -275,19 +304,25 @@ def main():
     md_lines = [
         "# Phase 2 Evaluation Report",
         "",
-        f"**Model:** lr-calibrated-v1.0.0",
-        f"**Holdout set:** {len(df)} records",
+        f"**Model:** lr-calibrated-v2.0.0-scenario",
+        f"**Holdout set:** {len(df)} total records / {len(eligible)} ML-eligible records",
         f"**Threshold:** {args.threshold}",
         "",
         "## AI Model vs Rules Baseline",
         "",
-        "| Metric | AI Model | Rules Baseline | Delta |",
+        "| Metric | AI Model | Rules Baseline | Difference (rules - AI) |",
         "|---|---|---|---|",
-        f"| PR-AUC | {ai_metrics['pr_auc']} | {rule_metrics['pr_auc']} | +{evidence['improvement']['pr_auc_delta']} |",
+        f"| PR-AUC | {ai_metrics['pr_auc']} | {rule_metrics['pr_auc']} | {evidence['improvement']['pr_auc_delta']} |",
         f"| Precision | {ai_metrics['precision']} | {rule_metrics['precision']} | -- |",
         f"| Recall | {ai_metrics['recall']} | {rule_metrics['recall']} | -- |",
         f"| F1 | {ai_metrics['f1']} | {rule_metrics['f1']} | -- |",
-        f"| FP Cost (INR) | {ai_metrics['false_positive_rupee_cost']} | {rule_metrics['false_positive_rupee_cost']} | -{evidence['improvement']['fp_cost_reduction_inr']} |",
+        f"| FP Cost (INR) | {ai_metrics['false_positive_rupee_cost']} | {rule_metrics['false_positive_rupee_cost']} | {evidence['improvement']['fp_cost_reduction_inr']} |",
+        "",
+        "## Mandatory security gate",
+        "",
+        f"- Deterministic hard-reject scenarios: {mandatory_gate['records']}",
+        f"- All detected before ML scoring: {mandatory_gate['all_expected_hard_rejects_detected']}",
+        "- Model scores applied to hard rejects: 0",
         "",
         "## Confusion Matrix (AI Model)",
         "",
@@ -301,8 +336,8 @@ def main():
         "## Production Decision (3-State: APPROVE / HOLD / REJECT)",
         "",
         "The metric that matters operationally: does a fraud transaction get auto-approved?",
-        "Simulates the exact DecisionPolicy path (rules gate + calibrated model + low-signal "
-        "guard) on the same holdout.",
+        "Simulates policy thresholds and the deterministic token/integrity gate. "
+        "Production rules that require live Redis state are tested separately in the service suite.",
         "",
         "| Outcome on fraud txns | Value |",
         "|---|---|",

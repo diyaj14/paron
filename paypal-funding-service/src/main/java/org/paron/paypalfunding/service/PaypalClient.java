@@ -32,6 +32,12 @@ public class PaypalClient {
                 .contentType(MediaType.APPLICATION_JSON).body(Map.of()).retrieve().body(String.class);
         return parse(response);
     }
+    /** Used before a capture retry: a remote capture can succeed even if our local request timed out. */
+    public JsonNode getOrder(String orderId) {
+        String response = client.get().uri("/v2/checkout/orders/{orderId}", orderId).headers(this::bearer)
+                .retrieve().body(String.class);
+        return parse(response);
+    }
     private void bearer(HttpHeaders headers) { headers.setBearerAuth(accessToken()); }
     private String accessToken() {
         String response = client.post().uri("/v1/oauth2/token").headers(h -> h.setBasicAuth(clientId, clientSecret))

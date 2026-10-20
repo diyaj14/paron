@@ -151,30 +151,31 @@ Demo settings: ₹5,000 token cap, ₹1,000 individual payment cap, 6-hour expir
 
 The model is a **calibrated logistic regression** on a v1 feature schema (amount deviation, per-device/user velocity in 5m/1h/24h windows, token reuse, token age, offline duration, merchant aggregate, hour/day patterns, freshness indicators). It is evaluated on a **held-out synthetic set** with a full evidence bundle:
 
-| Metric | AI model | Rules baseline | Delta |
+| Metric | AI model | Rules baseline | Difference |
 |---|---|---|---|
-| Precision | 0.978 | 0.602 | +0.38 |
-| Recall | 0.568 | 0.508 | +0.06 |
-| F1 | 0.718 | 0.551 | +0.17 |
-| **PR-AUC** | **0.709** | **0.445** | **+0.26** |
-| **FP cost (₹500/FP)** | **₹2,500** | **₹67,000** | **−₹64,500** |
+| Precision | 0.817 | 0.000 | -- |
+| Recall | 0.786 | 0.000 | -- |
+| F1 | 0.801 | 0.000 | -- |
+| **PR-AUC** | **0.911** | **0.146** | **+0.765** |
+| **FP cost (INR 500/FP)** | **INR 46,500** | **INR 0** | **INR -46,500** |
 
-The isolated classifier is a sanity check; **what matters operationally is the 3-state decision** (APPROVE / HOLD / REJECT) that the full rules + model + low-signal-guard path makes on each txn. On the same holdout, **64.2% of fraud transactions are never auto-approved** (rejected or held for review), while 81% of legitimate payments flow through to APPROVE. The full decision-path recall is the headline number for the risk manager:
+The isolated classifier is a sanity check; **what matters operationally is the 3-state decision** (APPROVE / HOLD / REJECT) made by the deterministic gate, model and low-signal guard. On the held-out scenario set, **98.8% of simulated fraud transactions are never auto-approved** (rejected or held for review), while 73.8% of legitimate payments flow through to APPROVE. These are synthetic-scenario results, not real-world fraud claims.
 
 | Outcome | Value |
 |---|---|
-| Fraud caught (REJECT or HOLD, never APPROVED) | **0.642** |
-| Fraud slips through (APPROVED) | 0.358 |
-| Legit APPROVED | 0.809 |
-| Legit held for review (false-hold) | 0.106 |
-| Legit hard-rejected (false-reject) | 0.084 |
+| Fraud caught (REJECT or HOLD, never APPROVED) | **0.988** |
+| Fraud slips through (APPROVED) | 0.012 |
+| Legit APPROVED | 0.738 |
+| Legit held for review (false-hold) | 0.255 |
+| Legit hard-rejected (false-reject) | 0.007 |
 
-Evidence: `docs/reports/phase2-evaluation.md` · `ml/artifacts/evaluation-evidence.json` · regenerate with:
+Evidence: `docs/reports/phase2-evaluation.md` · `ml/artifacts/scenario-v2/evaluation-evidence.json` · dataset card: `docs/scenario-data-card.md` · regenerate with:
 
 ```bash
-cd ml
-python generate_synthetic.py --seed 99 --n 2000 --out-dir ./data/holdout
-python evaluate.py --model ./artifacts/model.joblib --holdout ./data/holdout/features.csv --threshold 0.37
+python ml/generate_synthetic.py --seed 42 --n 12000 --out-dir ml/data/scenario-v2
+python ml/train.py --data ml/data/scenario-v2/features.csv --out-dir ml/artifacts/scenario-v2
+python ml/generate_synthetic.py --seed 99 --n 4000 --out-dir ml/data/scenario-v2-holdout
+python ml/evaluate.py --model ml/artifacts/scenario-v2/model.joblib --holdout ml/data/scenario-v2-holdout/features.csv --out-dir ml/artifacts/scenario-v2
 ```
 
 ### The AI Judge (dispute arbiter)

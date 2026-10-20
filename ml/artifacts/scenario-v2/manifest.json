@@ -1,0 +1,27 @@
+{
+  "model_version": "lr-calibrated-v2.0.0-scenario",
+  "feature_schema_version": "v1",
+  "threshold_policy_version": "thresholds-v1",
+  "seed": 42,
+  "total_records": 12000,
+  "ml_eligible_records": 10579,
+  "mandatory_rule_records_excluded": 1421,
+  "split": {
+    "strategy": "chronological_sequence_group_split",
+    "total_records": 12000,
+    "ml_eligible_records": 10579,
+    "mandatory_rule_records_excluded": 1421,
+    "sequence_counts": {
+      "train": 1603,
+      "validation": 534,
+      "test": 535
+    }
+  },
+  "train_count": 6363,
+  "val_count": 2143,
+  "test_count": 2073,
+  "threshold": 0.46,
+  "test_pr_auc": 0.9194,
+  "baseline_pr_auc": 0.1726,
+  "improvement_over_baseline": 0.7468
+}

@@ -1,291 +1,118 @@
-"""Synthetic offline-payment fraud dataset generator for Paron Guard.
+"""Scenario-based synthetic settlement dataset for Paron Guard.
 
-Produces a CSV matching the v1 feature schema with labels:
-  0 = legitimate
-  1 = fraud
-
-Usage:
-    python generate_synthetic.py --seed 42 --n 10000 --out-dir ./data
-
-Outputs:
-    features.csv      — (N rows × 25 cols: 24 features + label)
-    manifest.json     — seed, counts, fraud-rate, generator version
+This is a payment-event simulator, not a generator of independent random rows.
+Each sequence has an explicit expected policy outcome. Labels describe simulated
+ground truth only; they must never be presented as real-world fraud evidence.
 """
-
 import argparse
 import json
-import math
-import os
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 FEATURE_NAMES = [
-    "amount",
-    "amount_to_token_limit_ratio",
-    "merchant_amount_deviation",
-    "user_tx_count_5m",
-    "user_tx_count_1h",
-    "user_tx_count_24h",
-    "device_tx_count_5m",
-    "device_tx_count_1h",
-    "device_tx_count_24h",
-    "token_tx_count_24h",
-    "user_tx_value_1h",
-    "device_tx_value_24h",
-    "token_age_seconds",
-    "time_to_expiry_seconds",
-    "offline_duration_seconds",
-    "token_reuse_count",
-    "duplicate_payload_hash_count",
-    "previous_settlement_failed",
-    "merchant_risk_aggregate",
-    "hour_of_day",
-    "day_of_week",
-    "history_available",
-    "token_age_known",
-    "expiry_known",
+    "amount", "amount_to_token_limit_ratio", "merchant_amount_deviation",
+    "user_tx_count_5m", "user_tx_count_1h", "user_tx_count_24h",
+    "device_tx_count_5m", "device_tx_count_1h", "device_tx_count_24h",
+    "token_tx_count_24h", "user_tx_value_1h", "device_tx_value_24h",
+    "token_age_seconds", "time_to_expiry_seconds", "offline_duration_seconds",
+    "token_reuse_count", "duplicate_payload_hash_count", "previous_settlement_failed",
+    "merchant_risk_aggregate", "hour_of_day", "day_of_week",
+    "history_available", "token_age_known", "expiry_known",
 ]
-
+GENERATOR_VERSION = "2.0.0-scenario-sequences"
 TOKEN_LIMIT = 5000.0
-TOKEN_VALIDITY_SECONDS = 21600
-GENERATOR_VERSION = "1.0.0"
+
+SCENARIOS = {
+    "student_canteen_day": {"label": 0, "rule": "PASS", "policy": "APPROVE", "why": "Several small, routine payments."},
+    "offline_commute": {"label": 0, "rule": "PASS", "policy": "APPROVE", "why": "Valid payments synchronize after a normal long offline period."},
+    "large_legitimate_purchase": {"label": 0, "rule": "PASS", "policy": "HOLD_FOR_REVIEW", "why": "Unusual but valid high-value purchase."},
+    "new_device_low_signal": {"label": 0, "rule": "PASS", "policy": "HOLD_FOR_REVIEW", "why": "Legitimate payment with insufficient history."},
+    "campus_event_legitimate": {"label": 0, "rule": "PASS", "policy": "HOLD_FOR_REVIEW", "why": "A legitimate event creates high but explainable payment velocity."},
+    "below_threshold_velocity": {"label": 1, "rule": "PASS", "policy": "HOLD_FOR_REVIEW", "why": "Attacker stays below fixed rule thresholds but sequence is suspicious."},
+    "cross_merchant_token_conflict": {"label": 1, "rule": "HARD_REJECT", "policy": "REJECT", "why": "Different claims reuse an offline token."},
+    "tampered_receipt": {"label": 1, "rule": "HARD_REJECT", "policy": "REJECT", "why": "Signature/payload integrity failure represented for rule testing only."},
+}
 
 
-def generate_base_legitimate(n: int, rng: np.random.Generator) -> pd.DataFrame:
-    amounts = rng.lognormal(mean=6.0, sigma=1.0, size=n).clip(10, TOKEN_LIMIT)
-    ratio = (amounts / TOKEN_LIMIT).clip(0.0, 1.0)
-    merchant_dev = rng.exponential(0.3, size=n).clip(0.0, 5.0)
-    user_5m = rng.poisson(0.8, size=n).clip(0, 20)
-    user_1h = rng.poisson(2.5, size=n).clip(0, 50)
-    user_24h = rng.poisson(8.0, size=n).clip(0, 200)
-    dev_5m = rng.poisson(0.5, size=n).clip(0, 15)
-    dev_1h = rng.poisson(1.8, size=n).clip(0, 40)
-    dev_24h = rng.poisson(6.0, size=n).clip(0, 150)
-    tok_count_24h = rng.poisson(1.0, size=n).clip(0, 10)
-    user_val_1h = (user_1h * rng.lognormal(5.5, 0.8, size=n)).clip(0, 500000)
-    dev_val_24h = (dev_24h * rng.lognormal(5.5, 0.8, size=n)).clip(0, 1000000)
-    token_age = rng.uniform(60, TOKEN_VALIDITY_SECONDS * 0.8, size=n)
-    tte = rng.uniform(3600, TOKEN_VALIDITY_SECONDS * 0.9, size=n)
-    offline_dur = rng.exponential(300, size=n).clip(0, 7200)
-    token_reuse = rng.poisson(0.05, size=n).clip(0, 2)
-    dup_hash = rng.poisson(0.02, size=n).clip(0, 2)
-    prev_fail = rng.choice([0, 1], size=n, p=[0.95, 0.05]).astype(int)
-    merchant_risk = rng.beta(2, 20, size=n).clip(0.0, 1.0)
-    hour = rng.choice(24, size=n)
-    dow = rng.choice(7, size=n)
-    history = rng.choice([0, 1], size=n, p=[0.1, 0.9]).astype(int)
-    age_known = rng.choice([0, 1], size=n, p=[0.05, 0.95]).astype(int)
-    expiry_known = rng.choice([0, 1], size=n, p=[0.05, 0.95]).astype(int)
-
-    return pd.DataFrame({
-        "amount": amounts,
-        "amount_to_token_limit_ratio": ratio,
-        "merchant_amount_deviation": merchant_dev,
-        "user_tx_count_5m": user_5m,
-        "user_tx_count_1h": user_1h,
-        "user_tx_count_24h": user_24h,
-        "device_tx_count_5m": dev_5m,
-        "device_tx_count_1h": dev_1h,
-        "device_tx_count_24h": dev_24h,
-        "token_tx_count_24h": tok_count_24h,
-        "user_tx_value_1h": user_val_1h,
-        "device_tx_value_24h": dev_val_24h,
-        "token_age_seconds": token_age,
-        "time_to_expiry_seconds": tte,
-        "offline_duration_seconds": offline_dur,
-        "token_reuse_count": token_reuse,
-        "duplicate_payload_hash_count": dup_hash,
-        "previous_settlement_failed": prev_fail,
-        "merchant_risk_aggregate": merchant_risk,
-        "hour_of_day": hour,
-        "day_of_week": dow,
-        "history_available": history,
-        "token_age_known": age_known,
-        "expiry_known": expiry_known,
-    })
+def base_row(rng, event_time, sequence_id, scenario):
+    amount = float(np.clip(rng.lognormal(5.2, .45), 35, 900))
+    count_5m = int(rng.poisson(.8))
+    count_1h = max(count_5m, int(rng.poisson(2.5)))
+    count_24h = max(count_1h, int(rng.poisson(8)))
+    return {
+        "event_time": int(event_time), "sequence_id": sequence_id, "scenario_type": scenario,
+        "amount": amount, "amount_to_token_limit_ratio": amount / TOKEN_LIMIT,
+        "merchant_amount_deviation": float(np.clip(rng.gamma(1.2, .35), 0, 1.8)),
+        "user_tx_count_5m": count_5m, "user_tx_count_1h": count_1h, "user_tx_count_24h": count_24h,
+        "device_tx_count_5m": max(0, count_5m - int(rng.integers(0, 2))),
+        "device_tx_count_1h": max(0, count_1h - int(rng.integers(0, 2))),
+        "device_tx_count_24h": max(0, count_24h - int(rng.integers(0, 3))),
+        "token_tx_count_24h": int(rng.integers(1, 4)),
+        "user_tx_value_1h": float(amount * max(1, count_1h)), "device_tx_value_24h": float(amount * max(1, count_24h)),
+        "token_age_seconds": float(rng.uniform(300, 15000)), "time_to_expiry_seconds": float(rng.uniform(3000, 18000)),
+        "offline_duration_seconds": float(np.clip(rng.exponential(500), 30, 3600)),
+        "token_reuse_count": 0, "duplicate_payload_hash_count": 0, "previous_settlement_failed": 0,
+        "merchant_risk_aggregate": float(rng.beta(2, 18)), "hour_of_day": int((event_time // 3600) % 24),
+        "day_of_week": int((event_time // 86400) % 7), "history_available": 1, "token_age_known": 1, "expiry_known": 1,
+    }
 
 
-def inject_fraud_token_reuse(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
-    mask = rng.random(len(df)) < 0.12
-    n = mask.sum()
-    df.loc[mask, "token_reuse_count"] = rng.poisson(10, size=n).clip(5, 30)
-    df.loc[mask, "token_tx_count_24h"] = df.loc[mask, "token_reuse_count"] + rng.integers(3, 10)
-    df.loc[mask, "duplicate_payload_hash_count"] = rng.poisson(5, size=n).clip(2, 15)
-    df.loc[mask, "previous_settlement_failed"] = rng.choice([0, 1], size=n, p=[0.4, 0.6])
-    return df
+def apply_scenario(row, scenario, position, size, rng):
+    if scenario == "student_canteen_day":
+        row["amount"] = float(rng.uniform(40, 220)); row["amount_to_token_limit_ratio"] = row["amount"] / TOKEN_LIMIT
+        row["user_tx_count_5m"] = min(position, 3); row["user_tx_count_1h"] = position + 1
+    elif scenario == "offline_commute":
+        row["offline_duration_seconds"] = float(rng.uniform(5400, 9000)); row["amount"] = float(rng.uniform(80, 500)); row["amount_to_token_limit_ratio"] = row["amount"] / TOKEN_LIMIT
+    elif scenario == "large_legitimate_purchase":
+        row["amount"] = float(rng.uniform(2600, 3250)); row["amount_to_token_limit_ratio"] = row["amount"] / TOKEN_LIMIT
+        row["merchant_amount_deviation"] = float(rng.uniform(1.1, 1.8)); row["offline_duration_seconds"] = float(rng.uniform(300, 1800))
+    elif scenario == "new_device_low_signal":
+        row["history_available"] = 0; row["merchant_amount_deviation"] = float(rng.uniform(0, 1.2)); row["amount"] = float(rng.uniform(120, 1400)); row["amount_to_token_limit_ratio"] = row["amount"] / TOKEN_LIMIT
+    elif scenario == "campus_event_legitimate":
+        # Deliberately overlaps the cautious-fraud pattern: unusual does not
+        # automatically mean fraudulent, so this should generally be held.
+        row["amount"] = float(rng.uniform(350, 1350)); row["amount_to_token_limit_ratio"] = row["amount"] / TOKEN_LIMIT
+        row["user_tx_count_5m"] = int(rng.integers(2, 5)); row["device_tx_count_5m"] = row["user_tx_count_5m"]
+        row["user_tx_count_1h"] = int(rng.integers(6, 14)); row["device_tx_count_1h"] = row["user_tx_count_1h"]
+        row["offline_duration_seconds"] = float(rng.uniform(2400, 6800)); row["merchant_risk_aggregate"] = float(rng.uniform(.08, .42))
+    elif scenario == "below_threshold_velocity":
+        row["amount"] = float(rng.uniform(300, 1400)); row["amount_to_token_limit_ratio"] = row["amount"] / TOKEN_LIMIT
+        row["user_tx_count_5m"] = int(rng.integers(2, 5)); row["device_tx_count_5m"] = row["user_tx_count_5m"]
+        row["user_tx_count_1h"] = int(rng.integers(7, 15)) + position; row["device_tx_count_1h"] = max(5, row["user_tx_count_1h"] - int(rng.integers(0, 3)))
+        row["offline_duration_seconds"] = float(rng.uniform(2400, 7600)); row["merchant_risk_aggregate"] = float(rng.uniform(.10, .55))
+    elif scenario == "cross_merchant_token_conflict":
+        row["token_reuse_count"] = 1 + position; row["token_tx_count_24h"] = 2 + position; row["amount"] = float(rng.uniform(300, 900)); row["amount_to_token_limit_ratio"] = row["amount"] / TOKEN_LIMIT
+    elif scenario == "tampered_receipt":
+        row["duplicate_payload_hash_count"] = 1; row["amount"] = float(rng.uniform(900, 1800)); row["amount_to_token_limit_ratio"] = row["amount"] / TOKEN_LIMIT
+    row["label"] = SCENARIOS[scenario]["label"]; row["expected_rule_outcome"] = SCENARIOS[scenario]["rule"]
+    row["expected_policy_outcome"] = SCENARIOS[scenario]["policy"]; row["scenario_rationale"] = SCENARIOS[scenario]["why"]
+    row["ml_eligible"] = int(row["expected_rule_outcome"] == "PASS")
+    return row
 
 
-def inject_fraud_velocity(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
-    mask = rng.random(len(df)) < 0.12
-    n = mask.sum()
-    df.loc[mask, "user_tx_count_5m"] = rng.poisson(25, size=n).clip(15, 80)
-    df.loc[mask, "user_tx_count_1h"] = rng.poisson(80, size=n).clip(40, 200)
-    df.loc[mask, "user_tx_count_24h"] = rng.poisson(150, size=n).clip(80, 400)
-    df.loc[mask, "device_tx_count_5m"] = rng.poisson(20, size=n).clip(10, 60)
-    df.loc[mask, "device_tx_count_1h"] = rng.poisson(50, size=n).clip(25, 150)
-    df.loc[mask, "device_tx_count_24h"] = rng.poisson(100, size=n).clip(50, 300)
-    df.loc[mask, "user_tx_value_1h"] = rng.uniform(80000, 300000, size=n)
-    df.loc[mask, "device_tx_value_24h"] = rng.uniform(150000, 600000, size=n)
-    return df
-
-
-def inject_fraud_amount(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
-    mask = rng.random(len(df)) < 0.10
-    n = mask.sum()
-    df.loc[mask, "amount"] = rng.uniform(4200, 5000, size=n)
-    df.loc[mask, "amount_to_token_limit_ratio"] = rng.uniform(0.85, 1.0, size=n)
-    df.loc[mask, "merchant_amount_deviation"] = rng.uniform(8.0, 20.0, size=n)
-    df.loc[mask, "merchant_risk_aggregate"] = rng.uniform(0.5, 0.95, size=n)
-    return df
-
-
-def inject_fraud_odd_hour(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
-    mask = rng.random(len(df)) < 0.08
-    n = mask.sum()
-    df.loc[mask, "hour_of_day"] = rng.choice([1, 2, 3], size=n)
-    df.loc[mask, "offline_duration_seconds"] = rng.uniform(12000, 25000, size=n)
-    df.loc[mask, "user_tx_count_5m"] = rng.poisson(5, size=n).clip(3, 15)
-    df.loc[mask, "merchant_risk_aggregate"] = rng.uniform(0.4, 0.8, size=n)
-    df.loc[mask, "amount"] = rng.uniform(2000, 4500, size=n)
-    df.loc[mask, "amount_to_token_limit_ratio"] = rng.uniform(0.4, 0.9, size=n)
-    return df
-
-
-def inject_fraud_long_offline(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
-    mask = rng.random(len(df)) < 0.06
-    n = mask.sum()
-    df.loc[mask, "offline_duration_seconds"] = rng.uniform(25000, 86400, size=n)
-    df.loc[mask, "previous_settlement_failed"] = rng.choice([0, 1], size=n, p=[0.2, 0.8])
-    df.loc[mask, "time_to_expiry_seconds"] = rng.uniform(50, 1500, size=n)
-    df.loc[mask, "token_age_seconds"] = rng.uniform(19000, 21600, size=n)
-    df.loc[mask, "amount"] = rng.uniform(1500, 4000, size=n)
-    df.loc[mask, "amount_to_token_limit_ratio"] = rng.uniform(0.3, 0.8, size=n)
-    return df
-
-
-def inject_fraud_duplicate_payload(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
-    mask = rng.random(len(df)) < 0.05
-    n = mask.sum()
-    df.loc[mask, "duplicate_payload_hash_count"] = rng.poisson(10, size=n).clip(5, 30)
-    df.loc[mask, "token_reuse_count"] = rng.poisson(6, size=n).clip(2, 20)
-    df.loc[mask, "previous_settlement_failed"] = rng.choice([0, 1], size=n, p=[0.3, 0.7])
-    df.loc[mask, "merchant_risk_aggregate"] = rng.uniform(0.3, 0.7, size=n)
-    return df
-
-
-def inject_subtle_fraud(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
-    mask = rng.random(len(df)) < 0.10
-    n = mask.sum()
-    df.loc[mask, "amount"] = rng.uniform(2000, 3800, size=n)
-    df.loc[mask, "amount_to_token_limit_ratio"] = rng.uniform(0.4, 0.76, size=n)
-    df.loc[mask, "merchant_amount_deviation"] = rng.uniform(3.0, 7.0, size=n)
-    df.loc[mask, "user_tx_count_1h"] = rng.poisson(10, size=n).clip(5, 30)
-    df.loc[mask, "user_tx_count_5m"] = rng.poisson(4, size=n).clip(2, 12)
-    df.loc[mask, "merchant_risk_aggregate"] = rng.uniform(0.5, 0.9, size=n)
-    df.loc[mask, "hour_of_day"] = rng.choice([0, 1, 2, 3, 4, 22, 23], size=n)
-    df.loc[mask, "offline_duration_seconds"] = rng.uniform(3000, 10000, size=n)
-    return df
-
-
-def inject_fraud_signature_tamper(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
-    """Forged / tampered receipt: amount altered after signing.
-
-    The amount the merchant saw differs wildly from what was signed — the
-    crypto re-verification fails. These receipts look *almost* normal (single
-    token, low velocity) except for a suspicious amount/merchant pattern, which
-    is exactly what a signature-tamper attack hides behind.
-    """
-    mask = rng.random(len(df)) < 0.08
-    n = mask.sum()
-    df.loc[mask, "amount"] = rng.uniform(3000, 4900, size=n)
-    df.loc[mask, "amount_to_token_limit_ratio"] = rng.uniform(0.6, 0.98, size=n)
-    df.loc[mask, "merchant_amount_deviation"] = rng.uniform(5.0, 12.0, size=n)
-    df.loc[mask, "merchant_risk_aggregate"] = rng.uniform(0.4, 0.85, size=n)
-    df.loc[mask, "time_to_expiry_seconds"] = rng.uniform(2000, 12000, size=n)
-    return df
-
-
-def inject_fraud_cross_device_clean(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
-    """Same token spent from a different device, amounts kept under the cap.
-
-    The subtle double-spend: each individual payment looks legitimate and stays
-    under the display cap, but the same token is being replayed cross-device —
-    the kind of slow fraud the loud rules miss and only cumulative spend-state
-    or the model's learned cross-device signal can catch.
-    """
-    mask = rng.random(len(df)) < 0.10
-    n = mask.sum()
-    df.loc[mask, "token_reuse_count"] = rng.poisson(2, size=n).clip(1, 6)
-    df.loc[mask, "token_tx_count_24h"] = df.loc[mask, "token_reuse_count"] + rng.integers(1, 4)
-    df.loc[mask, "amount"] = rng.uniform(300, 1500, size=n)
-    df.loc[mask, "amount_to_token_limit_ratio"] = rng.uniform(0.06, 0.3, size=n)
-    df.loc[mask, "merchant_amount_deviation"] = rng.uniform(0.5, 2.0, size=n)
-    df.loc[mask, "history_available"] = rng.choice([0, 1], size=n, p=[0.3, 0.7])
-    df.loc[mask, "previous_settlement_failed"] = rng.choice([0, 1], size=n, p=[0.5, 0.5])
-    return df
-
-
-def generate(n: int, rng: np.random.Generator) -> pd.DataFrame:
-    n_legit = int(n * 0.80)
-    n_fraud = n - n_legit
-
-    legit = generate_base_legitimate(n_legit, rng)
-    legit["label"] = 0
-
-    fraud = generate_base_legitimate(n_fraud, rng)
-    fraud = inject_fraud_token_reuse(fraud, rng)
-    fraud = inject_fraud_velocity(fraud, rng)
-    fraud = inject_fraud_amount(fraud, rng)
-    fraud = inject_fraud_odd_hour(fraud, rng)
-    fraud = inject_fraud_long_offline(fraud, rng)
-    fraud = inject_fraud_duplicate_payload(fraud, rng)
-    fraud = inject_subtle_fraud(fraud, rng)
-    fraud = inject_fraud_signature_tamper(fraud, rng)
-    fraud = inject_fraud_cross_device_clean(fraud, rng)
-    fraud["label"] = 1
-
-    df = pd.concat([legit, fraud], ignore_index=True)
-    df = df.sample(frac=1.0, random_state=rng).reset_index(drop=True)
-    return df
+def generate(n, rng):
+    rows, event_time, seq = [], 0, 0
+    scenario_names = list(SCENARIOS)
+    weights = np.array([.24, .16, .11, .11, .12, .14, .07, .05]); weights /= weights.sum()
+    while len(rows) < n:
+        scenario = rng.choice(scenario_names, p=weights); size = int(rng.integers(2, 7)); sequence_id = f"seq-{seq:06d}"; seq += 1
+        for position in range(size):
+            if len(rows) >= n: break
+            event_time += int(rng.integers(20, 900)); row = base_row(rng, event_time, sequence_id, scenario)
+            rows.append(apply_scenario(row, scenario, position, size, rng))
+    return pd.DataFrame(rows).sort_values("event_time").reset_index(drop=True)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate synthetic Paron Guard dataset")
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--n", type=int, default=10000)
-    parser.add_argument("--out-dir", type=str, default="./data")
-    args = parser.parse_args()
-
-    rng = np.random.default_rng(args.seed)
-    df = generate(args.n, rng)
-
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    csv_path = out_dir / "features.csv"
-    df.to_csv(csv_path, index=False)
-
-    manifest = {
-        "generator_version": GENERATOR_VERSION,
-        "seed": args.seed,
-        "total_records": len(df),
-        "legitimate_count": int((df["label"] == 0).sum()),
-        "fraud_count": int((df["label"] == 1).sum()),
-        "fraud_rate": float((df["label"] == 1).mean()),
-        "feature_schema_version": "v1",
-        "feature_names": FEATURE_NAMES,
-        "csv_path": str(csv_path),
-    }
-    manifest_path = out_dir / "manifest.json"
-    with open(manifest_path, "w") as f:
-        json.dump(manifest, f, indent=2)
-
-    print(f"Generated {len(df)} records ({(df['label']==0).sum()} legit, {(df['label']==1).sum()} fraud)")
-    print(f"CSV: {csv_path}")
-    print(f"Manifest: {manifest_path}")
+    parser = argparse.ArgumentParser(); parser.add_argument("--seed", type=int, default=42); parser.add_argument("--n", type=int, default=10000); parser.add_argument("--out-dir", default="./data"); args = parser.parse_args()
+    df = generate(args.n, np.random.default_rng(args.seed)); out = Path(args.out_dir); out.mkdir(parents=True, exist_ok=True); df.to_csv(out / "features.csv", index=False)
+    counts = Counter(df["scenario_type"])
+    manifest = {"generator_version": GENERATOR_VERSION, "seed": args.seed, "total_records": len(df), "feature_schema_version": "v1", "feature_names": FEATURE_NAMES, "scenario_definitions": SCENARIOS, "scenario_counts": dict(counts), "ml_eligible_count": int(df.ml_eligible.sum()), "limitation": "Simulated scenario labels only; not real-world fraud performance."}
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    print(f"Generated {len(df)} chronological events across {df.sequence_id.nunique()} sequences; {manifest['ml_eligible_count']} ML-eligible.")
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()

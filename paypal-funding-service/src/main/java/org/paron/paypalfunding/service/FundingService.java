@@ -35,17 +35,22 @@ public class FundingService {
     }
 
     /** Safe to retry: the ledger rejects a second credit for the same funding ID. */
-    @Transactional
+    @Transactional(noRollbackFor = FundingVerificationException.class)
     public FundingResponse capture(String paypalOrderId) {
         FundingAttempt attempt = attempts.findByPaypalOrderId(paypalOrderId)
                 .orElseThrow(() -> new EntityNotFoundException("Unknown PayPal order"));
         if (attempt.getStatus() == FundingStatus.CREDITED) return FundingResponse.from(attempt, null);
-        JsonNode response = paypal.capture(paypalOrderId);
-        if (!"COMPLETED".equals(response.path("status").asText())) throw new IllegalStateException("PayPal capture is not completed");
+        // A local timeout does not roll back PayPal. Inspect its authoritative
+        // order state first; capture only when it has not already completed.
+        JsonNode response = paypal.getOrder(paypalOrderId);
+        if (!"COMPLETED".equals(response.path("status").asText())) response = paypal.capture(paypalOrderId);
+        if (!paypalOrderId.equals(response.path("id").asText()) || !"COMPLETED".equals(response.path("status").asText()))
+            throw new IllegalStateException("PayPal capture is not completed for this order");
         JsonNode capture = response.at("/purchase_units/0/payments/captures/0");
-        if (capture.isMissingNode() || !attempt.getAmount().setScale(2).toPlainString().equals(capture.at("/amount/value").asText())
+        if (capture.isMissingNode() || !"COMPLETED".equals(capture.path("status").asText())
+                || !attempt.getAmount().setScale(2).toPlainString().equals(capture.at("/amount/value").asText())
                 || !attempt.getCurrency().equals(capture.at("/amount/currency_code").asText())) {
-            attempt.setStatus(FundingStatus.FAILED); throw new IllegalStateException("Captured amount or currency does not match funding attempt");
+            attempt.setStatus(FundingStatus.FAILED); throw new FundingVerificationException("Captured amount, currency, or status does not match funding attempt");
         }
         attempt.setPaypalCaptureId(required(capture, "id")); attempt.setStatus(FundingStatus.CAPTURED);
         ledger.credit(attempt.getId(), attempt.getUserId(), attempt.getAmount());
@@ -56,4 +61,5 @@ public class FundingService {
     public FundingResponse find(UUID id) { return FundingResponse.from(attempts.findById(id).orElseThrow(() -> new EntityNotFoundException("Unknown funding ID")), null); }
     private static String required(JsonNode node, String field) { String value = node.path(field).asText(); if (value.isBlank()) throw new IllegalStateException("Invalid PayPal response"); return value; }
     private static String approvalUrl(JsonNode response) { for (JsonNode link : response.path("links")) if ("approve".equals(link.path("rel").asText())) return link.path("href").asText(); return null; }
+    static class FundingVerificationException extends RuntimeException { FundingVerificationException(String message) { super(message); } }
 }

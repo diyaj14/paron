@@ -1,0 +1,315 @@
+# OfflinePay AI — Final PayPal AI Hackathon Checklist
+
+This is the consolidated checklist covering implementation, AI evaluation, security, PayPal integration, user experience, judging criteria and submission. It is tailored to your existing Spring Boot offline-payment project, so it emphasizes completing and proving the core features rather than rebuilding what already works.
+
+Priority guide
+
+- P0 — Essential: complete before treating the project as submission-ready.
+- P1 — Important: improves quality, credibility and judging performance.
+- P2 — Optional: implement only after the core demo works reliably.
+
+## 1. Core offline payment system
+
+## Overall completion
+
+## 0/113
+
+0% checked off
+
+Reset progressCopy checklist
+
+## 1. Core offline payment system
+
+0 of 13 complete
+
+P0
+
+Audit all five existing microservices and document what works, what is incomplete and what is simulated.
+
+Reserve the permitted spending amount in the ledger before issuing an offline authorization.
+
+Issue a signed, expiring token bound to the user, device, reservation, spending limit and expiry.
+
+Implement or finish offline transaction recording on the payer side.
+
+Implement Bluetooth transfer and merchant-side verification, or clearly label a merchant simulator if Bluetooth is not complete.
+
+Enforce the token's spending limit and expiry.
+
+Store transactions as pending until synchronization.
+
+Synchronize pending transactions when connectivity returns.
+
+Validate the signature, reservation, token expiry, amount and transaction integrity before settlement.
+
+Settle valid transactions exactly once and update the ledger correctly.
+
+Handle failed synchronization, retries and partial batch failures.
+
+Detect conflicting claims against the same token and define what happens to each claim.
+
+Clearly distinguish authorized, pending, settled, rejected and held transactions.
+
+## 2. PayPal integration
+
+0 of 12 complete
+
+P0
+
+Create a PayPal Developer Sandbox app and configure credentials using environment variables.
+
+Implement server-side PayPal Orders API order creation.
+
+Implement server-side order capture and verify the returned capture status.
+
+Credit the demo wallet only after successful, verified capture.
+
+Prevent duplicate credits using unique funding references and idempotent ledger operations.
+
+Persist funding attempts and statuses, such as CREATED, CAPTURED, CREDITED and FAILED.
+
+Recover safely if PayPal succeeds but the local service times out; check PayPal status before retrying.
+
+Expose APIs to create funding orders, capture orders and query funding status.
+
+Test failure, duplicate requests and capture retries.
+
+Demonstrate PayPal Sandbox funding → wa
+llet ledger → offline spending authorization.
+
+Clearly explain that Sandbox money is simulated, not actual bank-reserved offline funds.
+
+Keep PayPal credentials and secrets out of frontend code and public source control.
+
+## 3. AI fraud detection
+
+0 of 15 complete
+
+P0
+
+Choose a tabular ML model such as CatBoost or XGBoost for the first version.
+
+Build a reproducible training and evaluation pipeline.
+
+Use a real public fraud dataset such as ULB Credit Card Fraud Detection for a general fraud benchmark.
+
+Document the dataset's origin, labels, limitations, class imbalance and permitted use.
+
+Create a separate offline-payment-specific dataset of legitimate and suspicious scenarios.
+
+Include features available at settlement time: transaction amount, offline duration, velocity, spending ratio and token-claim conflicts where observable.
+
+Prevent data leakage from future events, labels or post-settlement information.
+
+Split real data into training, validation and held-out test sets, preferably respecting time order.
+
+Keep mandatory signature, expiry, reservation and spending-limit checks deterministic.
+
+Expose an ML inference endpoint that returns a risk score and model version.
+
+Integrate the model with the existing Spring Boot Fraud Service.
+
+Persist the transaction ID, score, model version, reason codes and assessment timestamp.
+
+Define risk bands and a documented settlement, hold or review policy.
+
+Ensure the AI cannot override mandatory security failures.
+
+Run the model in shadow mode before allowing it to affect settlement decisions.
+
+## 4. Prove that AI adds value
+
+0 of 12 complete
+
+P0
+
+Benchmark the existing rule-based system on the same held-out cases.
+
+Evaluate the ML model alone as a comparison.
+
+Evaluate the combined rules-plus-ML system.
+
+Measure precision, recall, PR-AUC or Average Precision, false-positive rate and inference latency.
+
+Choose decision thresholds using validation data and document the trade-off between missed fraud and false alarms.
+
+Show a legitimate transaction that remains eligible for settlement.
+
+Show a suspicious case that the system flags, ideally one the rules alone did not catch.
+
+Explain the reason codes behind the model's assessment.
+
+Report real-data benchmark results separately from synthetic offline-scenario results.
+
+Never present synthetic-data accuracy as proof of real-world fraud performance.
+
+Record the model version and evaluation results so another person can reproduce them.
+
+Test behavior when the ML service times out or becomes unavailable and document the fallback policy.
+
+## 5. Security, ledger integrity and double-spending
+
+0 of 14 complete
+
+P0
+
+Validate signed tokens using the correct issuer key and algorithm configuration.
+
+Keep session authentication keys separate from offline-token signing keys.
+
+Never trust amount, user identity or settlement status supplied only by the frontend.
+
+Prevent duplicate processing of the same transaction ID.
+
+Test two different transaction IDs that claim the same token or spending allowance.
+
+Track cumulative claims against the authorized offline allowance during synchronization.
+
+Define a conflict policy for transactions that collectively exceed the allowance.
+
+Use database constraints and transactions to protect ledger invariants.
+
+Make funding and settlement operations idempotent.
+
+Handle Kafka retries, duplicate events and failed batches safely.
+
+Use recoverable state transitions for PayPal capture and local ledger credit because they are not one atomic transaction.
+
+Protect secrets, credentials, signing keys and sensitive data.
+
+Document that post-reconnection AI can detect suspicious spending but cannot retroactively prevent goods from being handed over offline.
+
+Document the remaining double-spend risks and any prevention mechanisms that are actually implemented.
+
+## 6. User interface and complete demo
+
+0 of 12 complete
+
+P1
+
+Create a clear wallet screen with funded balance and available offline allowance.
+
+Show the authorization's maximum amount and expiry.
+
+Provide a working merchant payment flow or clearly identified simulator.
+
+Show the offline state and pending transaction queue.
+
+Show synchronization progress after connectivity returns.
+
+Display transaction statuses: pending, syncing, settled, rejected or held for review.
+
+Display the AI risk assessment with understandable reasons rather than only a raw score.
+
+Provide a transaction history and a simple settlement/fraud dashboard.
+
+Prepare a legitimate-payment demo scenario.
+
+Prepare a suspicious-payment demo scenario that matches the implemented behavior.
+
+Make the demo repeatable using seeded data, documented steps and a reset procedure.
+
+Ensure the interface communicates errors and recovery states clearly.
+
+## 7. Testing and reliability
+
+0 of 10 complete
+
+P0
+
+Write unit tests for token validation, reservations, spending caps and settlement logic.
+
+Write integration tests for PayPal funding, synchronization, fraud assessment and ledger updates.
+
+Test expired tokens, invalid signatures and amount-limit violations.
+
+Test duplicate requests, replay attempts, conflicting claims and concurrent settlement.
+
+Test PayPal timeouts, duplicate captures and recovery after partial failure.
+
+Test Kafka retries, repeated events and failed batches.
+
+Test ML service downtime and slow responses.
+
+Check ledger balances and reservation states before and after each test.
+
+Run the full end-to-end flow from a clean state.
+
+Record the results of key tests and fix critical failures before submission.
+
+## 8. Innovation, impact and judging readiness
+
+0 of 10 complete
+
+P1
+
+Write a concise statement explaining the real-world connectivity problem.
+
+Explain how the project differs from ordinary online payment and existing offline-payment approaches.
+
+Explain why ML is needed in addition to deterministic security rules.
+
+Identify the intended users, such as campus canteens and merchants in connectivity-poor locations.
+
+Explain why PayPal is meaningfully integrated into the user journey.
+
+Prepare an honest explanation of offline double-spending and delayed detection.
+
+Prepare answers to: Why AI? Why PayPal? What happens if two merchants accept the same token? What happens if AI is unavailable?
+
+Demonstrate a real model result rather than a hardcoded risk score presented as AI output.
+
+Clearly distinguish implemented, simulated and planned functionality.
+
+Describe the project's limitations without claiming production-grade payment security.
+
+## 9. Repository, documentation and submission
+
+0 of 15 complete
+
+P0
+
+Publish the project source code in a public repository.
+
+Add an appropriate open-source license.
+
+Write a README covering the problem, architecture, setup, services, APIs and demo flow.
+
+Include architecture diagrams and a concise explanation of the ledger, token, synchronization and fraud pipeline.
+
+Document required environment variables using placeholders, never real secrets.
+
+Provide database setup, migration and seed-data instructions.
+
+Document how to run the model, train it and reproduce its evaluation.
+
+Document known limitations, test results and which features are simulated.
+
+Verify a fresh setup using only the README instructions.
+
+Prepare a reliable demo environment and safe demo credentials.
+
+Record a concise demo video within the official time limit.
+
+Show funding, offline payment, reconnection, AI assessment and settlement in the demo.
+
+Complete every required Devpost field, repository link, demo link and disclosure.
+
+Verify the current official deadline, rules, eligibility and deliverables before submitting.
+
+Ensure the final submission accurately describes what is implemented rather than planned.
+
+## 10. Final go/no-go test
+
+Before submitting, verify these six things in a single test session.
+
+- A user funds the demo wallet through PayPal Sandbox.
+- The backend issues an offline spending authorization within the reserved limit.
+- A merchant accepts a payment in the offline flow.
+- After reconnection, the system synchronizes the payment and runs fraud assessment.
+- The legitimate payment settles correctly, while a suspicious test case receives the documented risk action.
+- The public repository, setup instructions and demo video accurately reflect the working implementation.
+
+If one of the first five fails, fix that before spending time on visual polish.
+
+The most important principle: your hackathon project is not finished merely because all the services exist. It is finished when the complete flow works, the AI's contribution is measured, the failure cases are understood, and a judge can reproduce the result.
