@@ -38,7 +38,7 @@ public class SettlementProcessor implements ItemProcessor<OfflineTransaction,Set
             return null;
         }
         try{
-            TokenValidationResult tokenResult =tokenServiceClient.validateToken(transaction.getOfflineToken(),transaction.getAmount());
+            TokenValidationResult tokenResult =tokenServiceClient.validateToken(transaction.getOfflineToken(),transaction.getAmount(),transaction.getDeviceId());
             if(!tokenResult.isValid()){
                 log.warn("Token validation failed. reason={}, deviceTransactionId={}",
                         tokenResult.getReason(), transaction.getDeviceTransactionId());
@@ -51,6 +51,14 @@ public class SettlementProcessor implements ItemProcessor<OfflineTransaction,Set
 
             FraudCheckResult fraudResult = fraudCheckClient.check(transaction);
             transaction.setFraudScore(fraudResult.getScore());
+
+            if("HOLD_FOR_REVIEW".equals(fraudResult.getDecision())){
+                log.warn("Fraud check holding transaction for review. decision={}, deviceTransactionId={}",
+                        fraudResult.getDecision(), transaction.getDeviceTransactionId());
+                transaction.setStatus(TransactionStatus.HELD_FOR_REVIEW);
+                transaction.setRejectionReason("FRAUD_HOLD: " + (fraudResult.getReasonCodes() != null ? String.join(",", fraudResult.getReasonCodes()) : fraudResult.getReason()));
+                return new SettlementContext(transaction, null);
+            }
 
             if(!fraudResult.isApproved()){
                 log.warn("Fraud check rejected transaction. reason={}, deviceTransactionId={}", fraudResult.getReason(), transaction.getDeviceTransactionId());

@@ -1,0 +1,7 @@
+{
+  "name": "paron-customer-pwa",
+  "private": true,
+  "scripts": {
+    "check": "node --check src/app.js && node --check public/service-worker.js"
+  }
+}

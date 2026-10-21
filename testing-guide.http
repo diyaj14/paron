@@ -67,6 +67,7 @@ Content-Type: application/json
 
 {
   "userId": "{{userId}}",
+  "deviceId": "device_1",
   "amount": 500.00,
   "expiryHours": 6
 }
@@ -82,12 +83,15 @@ Authorization: Bearer {{sessionToken}}
 
 ### Step 4 — Validate the offline token (token-service, internal)
 ###   GET with a request body (call via curl/Postman if your client rejects it).
+###   sync-service actually calls this as POST /api/v1/tokens/validate.
+###   `deviceId` must match the device the token was bound to at issuance.
 GET {{base_token}}/api/v1/tokens/validateToken
 Content-Type: application/json
 
 {
   "token": "{{offlineToken}}",
-  "spentAmount": 0
+  "spentAmount": 0,
+  "deviceId": "device_1"
 }
 # -> 200  {valid: true, userId, reservationId, maxAmount: 500.00,
 #        spentAmount: 0, reason: null}
@@ -204,6 +208,7 @@ Content-Type: application/json
 
 {
   "userId": "{{userId}}",
+  "deviceId": "device_1",
   "amount": 500.00,
   "expiryHours": 6
 }
@@ -216,6 +221,7 @@ Content-Type: application/json
 
 {
   "userId": "some_other_user",
+  "deviceId": "device_1",
   "amount": 20000.00,
   "expiryHours": 6
 }
@@ -228,7 +234,8 @@ Content-Type: application/json
 
 {
   "token": "{{offlineToken}}",
-  "spentAmount": 600.00
+  "spentAmount": 600.00,
+  "deviceId": "device_1"
 }
 # -> 200  {valid: false, reason: "AMOUNT_EXCEEDS_LIMIT"}
 
@@ -252,3 +259,15 @@ Content-Type: application/json
   "userId": "{{userId}}"
 }
 # -> 404  (no gateway route exists; services call each other directly)
+
+
+### N8 — Token presented from a different device
+POST {{base_token}}/api/v1/tokens/validate
+Content-Type: application/json
+
+{
+  "token": "{{offlineToken}}",
+  "spentAmount": 100.00,
+  "deviceId": "some_other_device"
+}
+# -> 200  {valid: false, reason: "DEVICE_MISMATCH"}

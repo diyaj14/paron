@@ -61,6 +61,22 @@ public class LedgerServiceClient {
         throw new RuntimeException("ledger-service unavailable, settlement deferred for retry", t);
     }
 
+    /*
+     * Best-effort merchant credit — called by SettlementWriter after the
+     * customer side of a payment has settled. Never fails the transaction:
+     * callers catch and log, since the money is already moving correctly.
+     */
+    public void creditMerchant(String merchantId, BigDecimal amount) {
+        String url = ledgerServiceUrl + "/api/v1/ledger/merchants/" + merchantId + "/credit";
+        Map<String,Object> body = Map.of("amount", amount);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String,Object>> requestEntity = new HttpEntity<>(body, headers);
+        log.info("Calling ledger-service to credit merchant. merchantId={}, amount={}",
+                merchantId, amount);
+        restTemplate.postForObject(url, requestEntity, Map.class);
+    }
+
 
 
 }

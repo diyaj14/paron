@@ -13,6 +13,7 @@ import org.paron.syncservice.exception.SyncException;
 import org.paron.syncservice.kafka.TransactionProducer;
 import org.paron.syncservice.repository.OfflineTransactionRepository;
 import org.paron.syncservice.service.SyncService;
+import org.paron.syncservice.signature.SignatureVerifier;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -22,6 +23,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 public class SyncServiceTest {
@@ -31,6 +34,9 @@ public class SyncServiceTest {
 
     @Mock
     private OfflineTransactionRepository transactionRepository;
+
+    @Mock
+    private SignatureVerifier signatureVerifier;
 
     @InjectMocks
     private SyncService syncService;
@@ -45,6 +51,7 @@ public class SyncServiceTest {
         validTxn.setAmount(new BigDecimal("150.00"));
         validTxn.setMerchantId("merchant_abc");
         validTxn.setTransactedAt(LocalDateTime.now());
+        lenient().when(signatureVerifier.isValid(any(OfflineTransactionDto.class))).thenReturn(true);
     }
 
     @Test

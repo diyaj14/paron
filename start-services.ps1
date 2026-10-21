@@ -1,8 +1,13 @@
-$root = "E:\payment"
+$root = $PSScriptRoot
 Set-Location $root
 
-. .\set-env.ps1
-$env:JAVA_HOME = "C:\Program Files\Java\jdk-26.0.1"
+. (Join-Path $root "set-env.ps1")
+
+$javaHome = Get-ChildItem "C:\Program Files\Java" -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like 'jdk-*' } |
+    Sort-Object Name -Descending |
+    Select-Object -First 1 -ExpandProperty FullName
+if ($javaHome) { $env:JAVA_HOME = $javaHome }
 
 $services = @(
     @{ Name = "api-gateway"; Port = 8080; Jar = "api-gateway\target\api-gateway-1.0.jar" },
@@ -16,7 +21,7 @@ foreach ($svc in $services) {
     Start-Process powershell -ArgumentList @(
         '-NoExit',
         '-Command',
-        "Set-Location '$root'; . .\\set-env.ps1; `$env:JAVA_HOME='C:\\Program Files\\Java\\jdk-26.0.1'; java -jar '$($svc.Jar)' --server.port=$($svc.Port)"
+        "Set-Location '$root'; . '.\set-env.ps1'; `$env:JAVA_HOME='$env:JAVA_HOME'; java -jar '$($svc.Jar)' --server.port=$($svc.Port)"
     )
 }
 

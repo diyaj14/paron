@@ -17,6 +17,7 @@ import java.math.BigDecimal;
  *  2. JWT is not expired
  *  3. Token status in DB is still ACTIVE
  *  4. spentAmount does not exceed the token's maxAmount
+ *  5. (when supplied) the presenting device matches the token's bound device
  */
 @Data
 public class ValidateTokenRequest {
@@ -26,4 +27,9 @@ public class ValidateTokenRequest {
 
     @NotNull(message = "spentAmount is required")
     private BigDecimal spentAmount;
+
+    // The device presenting the token. Optional for backward compatibility
+    // (a null means "not supplied"); when present it must match the device
+    // the token was bound to at issuance.
+    private String deviceId;
 }

@@ -1,0 +1,377 @@
+# Implementation plan: OfflinePay AI
+
+Your current backend is the foundation. I would preserve all five microservices and add only two new capabilities: PayPal funding and ML-assisted fraud detection. An AI investigation assistant can come later if time permits.
+
+The PayPal AI Hackathon explicitly allows existing projects that are significantly updated during the submission period. It also requires a working demo and a public, licensed source-code repository.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://paypalaihackathon.devpost.com\&sz=32)
+
+Devpost
+
++1
+
+
+
+## 1. Target architecture
+
+Frontend
+
+Wallet · PayPal funding · Offline payment simulator · Risk dashboard
+
+API Gateway
+
+Existing RS256 session authentication and rate limiting
+
+PayPal Funding Service
+
+Create orders, capture payments, verify funding
+
+AI Risk Engine
+
+Feature extraction, anomaly score, explanations
+
+Existing payment microservices
+
+Token Service · Sync Service · Fraud Service · Ledger
+
+PostgreSQL
+
+Payment and ledger records
+
+Kafka + Redis
+
+Async events and idempotency
+
+Key design decision: PayPal captures money in the PayPal sandbox; your Ledger records the corresponding verified funding event. The two are separate systems, so do not assume a single `@Transactional` annotation can make them atomic together.
+
+The PayPal Orders API supports creating an order and capturing it server-side. PayPal specifically recommends making these API calls from your backend rather than directly from the browser.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://developer.paypal.com\&sz=32)
+
+PayPal Developer
+
++1
+
+
+
+## 2. PayPal integration: APIs and transaction flow
+
+Create a new Spring Boot module or microservice named `paypal-funding-service`. Keeping it separate means you can implement and test PayPal without disturbing your existing Ledger.
+
+### API endpoints to implement
+
+| Endpoint                                            | Purpose                                                         |
+| --------------------------------------------------- | --------------------------------------------------------------- |
+| `POST /api/funding/paypal/orders`                   | Create a PayPal sandbox order for a server-calculated amount    |
+| `POST /api/funding/paypal/orders/{orderId}/capture` | Capture an approved order through PayPal                        |
+| `GET /api/funding/{fundingId}`                      | Return the funding attempt and ledger-credit status             |
+| `POST /api/webhooks/paypal`                         | Optional but valuable: receive and verify PayPal webhook events |
+
+These are your application's endpoints, not PayPal's API URLs.
+
+Your service calls PayPal's `POST /v2/checkout/orders` endpoint to create an order and `POST /v2/checkout/orders/{id}/capture` to capture it. Use the sandbox base URL `https://api-m.sandbox.paypal.com`.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://developer.paypal.com\&sz=32)
+
+PayPal Developer
+
++1
+
+
+
+### End-to-end funding sequence
+
+1. The authenticated user requests a funding amount from your frontend.
+2. Your backend validates the amount, generates an internal funding ID, and creates a PayPal order using server-side credentials.
+3. The frontend displays the PayPal checkout button and the user approves the sandbox payment.
+4. Your backend captures the order and verifies the returned order ID, capture status, currency, and amount against its own funding record.
+5. Your backend records a verified funding event and credits the application's demo wallet exactly once.
+6. The Token Service can issue an offline spending authorization against the resulting eligible demo-wallet balance.
+
+### Important: distinguish a demo wallet from real stored value
+
+A PayPal sandbox capture is not proof that your application has created a regulated, bank-backed wallet deposit. For this hackathon, describe the result as sandbox-funded demo-wallet credit. A production wallet would require a separately designed, authorized funding and settlement arrangement.
+
+Do not let the browser directly credit the wallet. Do not trust a frontend success redirect as payment confirmation. The backend must verify the capture with PayPal.
+
+### How to handle retries safely
+
+Reuse your existing Redis idempotency approach, but make funding idempotency explicit:
+
+- Generate a unique internal `funding_id`.
+- Enforce uniqueness on the PayPal order ID and capture ID.
+- Record the capture result before issuing a wallet-credit event.
+- Use a database transaction and a unique ledger reference to prevent duplicate credits.
+- For reliable event delivery, use a transactional outbox or a recoverable state machine.
+
+If a capture succeeds remotely but your service times out, query PayPal's order/capture state before retrying blindly. A local database rollback cannot undo a successful external capture.
+
+## 3. Database changes
+
+Keep your existing transaction, reservation, and ledger tables. Add the following tables, adapting the column names to your current schema.
+
+`paypal_funding_attempts`
+
+Tracks the external PayPal transaction.
+
+| Column                     | Purpose                                                 |
+| -------------------------- | ------------------------------------------------------- |
+| `id`                       | Internal funding ID, primary key                        |
+| `user_id`                  | Authenticated wallet owner                              |
+| `paypal_order_id`          | PayPal order ID, unique                                 |
+| `paypal_capture_id`        | Capture ID, unique when present                         |
+| `amount`, `currency`       | Expected funding amount                                 |
+| `status`                   | `CREATED`, `APPROVED`, `CAPTURED`, `CREDITED`, `FAILED` |
+| `created_at`, `updated_at` | Audit timestamps                                        |
+
+`wallet_funding_events`
+
+Records exactly-once application crediting.
+
+| Column            | Purpose                          |
+| ----------------- | -------------------------------- |
+| `id`              | Primary key                      |
+| `funding_id`      | Reference to the funding attempt |
+| `ledger_entry_id` | Corresponding ledger entry       |
+| `event_type`      | e.g. `PAYPAL_CAPTURE_CREDIT`     |
+| `created_at`      | Credit timestamp                 |
+
+Add a unique constraint on the funding reference and event type.
+
+`transaction_risk_assessments`
+
+Stores reproducible ML decisions.
+
+| Column           | Purpose                                |
+| ---------------- | -------------------------------------- |
+| `transaction_id` | Transaction being assessed             |
+| `model_version`  | Exact model version                    |
+| `risk_score`     | Normalized score                       |
+| `risk_band`      | Low, medium, or high                   |
+| `reason_codes`   | Signals contributing to the assessment |
+| `assessed_at`    | Assessment timestamp                   |
+
+Consider a composite uniqueness rule on transaction ID and model version.
+
+Also consider an `outbox_events` table if you use the transactional outbox pattern for Kafka delivery.
+
+Your ledger should distinguish at least these concepts:
+
+- Available balance: funds eligible for new offline authorization.
+- Reserved balance: funds committed to outstanding offline spending authorizations.
+- Settled balance or entries: funds accounted for after successful settlement.
+
+Do not simply add every PayPal funding event to the available balance without checking the wallet's reservation and ledger invariants.
+
+## 4. AI integration: upgrade your existing Fraud Service
+
+Do not replace the rule-based fraud logic. Keep it as your deterministic security layer and add a model alongside it.
+
+Incoming synchronized transaction
+
+Existing rules
+
+Token expiry, signature, reuse, amount caps, velocity and timestamp constraints
+
+New ML model
+
+Anomaly detection using transaction features and spending history
+
+Risk decision service
+
+Combine rule outcomes and model score, then apply explicit decision thresholds
+
+Settle
+
+Review
+
+Reject
+
+The diagram represents the intended design, not a claim that these components are already implemented. In particular, a high anomaly score should generally trigger review rather than automatically establish fraud.
+
+### Model inputs
+
+Start with features that your existing backend can produce:
+
+| Feature               | Example                                              |
+| --------------------- | ---------------------------------------------------- |
+| `amount_ratio`        | Transaction amount divided by authorized amount      |
+| `transactions_5m`     | Number of transactions in a recent time window       |
+| `token_reuse_count`   | Number of observed uses of the same token            |
+| `time_since_previous` | Seconds since the previous transaction               |
+| `amount_deviation`    | Difference from the user's historical spending level |
+| `settlement_delay`    | Time between offline acceptance and synchronization  |
+
+Normalize features and handle missing history explicitly. Never include raw JWTs, signing secrets, or unnecessary personal data in the model input.
+
+### Which model should you build?
+
+Given that your current system has rule-based scoring but no trained model, I recommend this progression:
+
+1. Generate a reproducible dataset of legitimate and suspicious synthetic transactions.
+2. Establish the rule-based service's baseline results.
+3. Train an anomaly-detection model, such as Isolation Forest, or a supervised classifier if you have defensible labels.
+4. Run the model in shadow mode: store its scores without allowing it to change settlement decisions.
+5. Compare results and add a controlled review threshold.
+
+Since your project is Java-based, investigate a Java ML library such as [Tribuo](https://tribuo.org/?utm_source=chatgpt.com) or [Smile](https://haifengl.github.io/?utm_source=chatgpt.com) for the selected algorithm and version. A separate Python inference service is another option, but it introduces deployment and service-to-service communication work.
+
+Do not claim that synthetic-data performance proves real-world fraud detection. Report the dataset composition, evaluation method, precision, recall, F1, and false-positive rate, and distinguish simulated results from real transaction performance.
+
+### AI service API
+
+Add a small internal API to the Fraud Service or a separate risk module:
+
+| Endpoint                                         | Purpose                                      |
+| ------------------------------------------------ | -------------------------------------------- |
+| `POST /internal/risk/assessments`                | Evaluate one transaction                     |
+| `GET /internal/risk/assessments/{transactionId}` | Retrieve its assessment                      |
+| `GET /api/risk/summary`                          | Show risk counts and trends on the dashboard |
+
+Example request:
+
+```
+{
+  "transactionId": "txn-demo-104",
+  "amount": 450.00,
+  "authorizedMaximum": 500.00,
+  "transactionsInLastFiveMinutes": 7,
+  "tokenReuseCount": 2,
+  "secondsSincePreviousTransaction": 3
+}
+```
+
+The response should include a model version, risk score, risk band, reason codes, and recommended action. The API contract is illustrative; adapt it to the actual features and types in your existing service.
+
+For the first version, I would skip the LLM copilot. A trained model integrated into the real settlement workflow is easier to evaluate and demonstrate than a chatbot that merely describes transactions.
+
+## 5. Realistic build order: October 15–November 12
+
+You have roughly four weeks until the published submission deadline. The safest approach is to establish a complete PayPal flow first, then add AI, and reserve the final week for reliability, deployment, and the demo.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://paypalaihackathon.devpost.com\&sz=32)
+
+Devpost
+
++1
+
+
+
+## Week 1
+
+Oct 15–21
+
+Milestone 1 — PayPal sandbox funding
+
+Highest priority
+
+- Set up PayPal developer sandbox credentials.
+- Implement order creation and capture in Spring Boot.
+- Add `paypal_funding_attempts` and unique payment references.
+- Connect successful, verified captures to demo-wallet credits.
+- Test duplicate capture requests, invalid amounts, and timeouts.
+
+Deliverable: a successful sandbox payment updates your application's wallet exactly once.
+
+## Week 2
+
+Oct 22–28
+
+Milestone 2 — End-to-end offline payment
+
+- Connect wallet funding to the existing reservation and Token Service.
+- Implement a minimal merchant payment simulator.
+- Synchronize accepted payments through your existing Sync Service and Kafka.
+- Verify duplicate transaction handling and settlement invariants.
+- Add integration tests across funding, token issuance, synchronization, and ledger posting.
+
+Deliverable: fund → authorize → simulate offline payment → synchronize → settle.
+
+## Week 3
+
+Oct 29–Nov 4
+
+Milestone 3 — ML fraud detection
+
+- Build the synthetic dataset and baseline evaluation.
+- Train and integrate the selected ML model.
+- Add risk-assessment persistence and model-version tracking.
+- Run shadow-mode evaluations against the existing rules.
+- Display risk scores and suspicious transaction evidence in the dashboard.
+
+Deliverable: a measurable AI feature operating on transactions from your real application flow.
+
+## Week 4
+
+Nov 5–12
+
+Milestone 4 — Submission readiness
+
+- Test retries, service failures, duplicate events, and inconsistent states.
+- Add authentication, input validation, and secret management.
+- Document local setup, sandbox configuration, test scenarios, and known limitations.
+- Publish the repository with an open-source license.
+- Record a concise, under-three-minute demonstration video.
+- Submit before the deadline.
+
+Deliverable: a repeatable demo that judges can run and evaluate.
+
+These are target milestones, not guaranteed estimates. If the existing backend needs significant repair, prioritize a complete funding-to-settlement demo and a simple but measurable model over optional features.
+
+## 6. Testing checklist
+
+Use this as your release gate.
+
+## Release checklist
+
+0 / 16 complete
+
+PayPal funding
+
+Approved sandbox payment credits the demo wallet once
+
+Failed or cancelled payment does not credit the wallet
+
+Duplicate capture request does not duplicate wallet credit
+
+Server validates capture amount, currency and status
+
+Offline payments
+
+Expired or invalid tokens are rejected
+
+Repeated transaction IDs cannot settle twice
+
+Different transactions reusing the same token are detected or constrained
+
+Failed synchronization can be retried safely
+
+AI
+
+Model runs against actual transaction features
+
+Rule-only baseline and model results are compared
+
+Risk score, model version and reason codes are persisted
+
+High-risk transactions can be reviewed without silently bypassing hard security rules
+
+Submission
+
+Fresh setup works using documented instructions
+
+Sandbox credentials are excluded from the public repository
+
+Public repository has an open-source license
+
+Demo video is under three minutes and shows working functionality
+
+## 7. Three decisions to make before coding
+
+1. PayPal funding semantics: use sandbox payments to credit a clearly labelled internal demo wallet, not a claim of real bank-backed stored value.
+2. AI implementation: prefer a Java-compatible model to preserve your existing stack; use Python only if the chosen model or development speed justifies a separate service.
+3. Scope: implement one working merchant simulator rather than trying to finish QR, NFC, and Bluetooth simultaneously.
+
+One final architecture consideration: keep your rule engine responsible for deterministic security checks. AI should add risk intelligence, not replace signature verification, token expiry enforcement, idempotency, or ledger integrity.
+
+If you implement these pieces cleanly, the project will tell a coherent story: PayPal funds the demo wallet, your existing system enables offline spending, and AI helps evaluate the risk when transactions synchronize. That is a much stronger submission than simply attaching a PayPal checkout button to the existing project.

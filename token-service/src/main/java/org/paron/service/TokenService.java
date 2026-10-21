@@ -64,6 +64,7 @@ public class TokenService {
         //a placeholder fpr uuid replaced by jwt later
         TokenRecord record = TokenRecord.builder()
                 .userId(request.getUserId())
+                .deviceId(request.getDeviceId())
                 .reservationId(reservationId)
                 .tokenValue("PENDING")          // placeholder — replaced in next step
                 .maxAmount(request.getAmount())
@@ -78,6 +79,7 @@ public class TokenService {
                 request.getUserId(),
                 record.getId(),
                 reservationId,
+                request.getDeviceId(),
                 request.getAmount(),
                 expiresAt
         );
@@ -92,6 +94,7 @@ public class TokenService {
                 .tokenId(record.getId())
                 .token(jwt)                     // ← this gets stored on the device
                 .userId(request.getUserId())
+                .deviceId(request.getDeviceId())
                 .maxAmount(request.getAmount())
                 .issuedAt(record.getCreatedAt())
                 .expiresAt(expiresAt)
@@ -104,12 +107,15 @@ public class TokenService {
     /*
      * Validates an offline spending token.
      *
-     * Two-layer check:
+     * Three-layer check:
      *  Layer 1 — Cryptographic: is the JWT signature valid? (JwtUtil)
      *  Layer 2 — Business:      is the DB record ACTIVE and not overspent?
+     *  Layer 3 — Identity:      is the token being presented by the device
+     *                           it was issued to?
      *
-     * Both must pass. A valid JWT from a token that was already USED
-     * (e.g. a replay attack) will fail Layer 2.
+     * All must pass. A valid JWT from a token that was already USED
+     * (e.g. a replay attack) will fail Layer 2; one presented from a
+     * different device fails Layer 3.
      */
 
     public ValidateTokenResponse validate(ValidateTokenRequest request) {
@@ -140,9 +146,28 @@ public class TokenService {
                     .reason("TOKEN_STATUS_" + record.getStatus().name())
                     .build();
         }
-        // Spent amount must not exceed the max the user was allowed
-        if (request.getSpentAmount().compareTo(record.getMaxAmount()) > 0) {
-            log.warn("Spent amount {} exceeds max {}", request.getSpentAmount(), record.getMaxAmount());
+        // ── Layer 3: Device binding
+        // The token is bound to the device it was issued to. If the caller
+        // says which device is presenting it, that must be the bound device.
+        // (A null on either side means "unbound"/not supplied — allow it so
+        // tokens issued before device binding still validate.)
+        if (request.getDeviceId() != null && record.getDeviceId() != null
+                && !record.getDeviceId().equals(request.getDeviceId())) {
+            log.warn("Token presented from a different device. tokenId={}, boundDevice={}, presentedDevice={}",
+                    record.getId(), record.getDeviceId(), request.getDeviceId());
+            return ValidateTokenResponse.builder()
+                    .valid(false)
+                    .reason("DEVICE_MISMATCH")
+                    .build();
+        }
+        // Cumulative spend (already settled on this token + this payment)
+        // must not exceed the max the user was allowed. Without the cumulative
+        // part, each payment is only checked against the full limit and a
+        // multi-payment token could sail way past it.
+        BigDecimal alreadySpent = record.getSpentAmount() != null ? record.getSpentAmount() : BigDecimal.ZERO;
+        BigDecimal projectedSpend = alreadySpent.add(request.getSpentAmount());
+        if (projectedSpend.compareTo(record.getMaxAmount()) > 0) {
+            log.warn("Cumulative spend {} exceeds max {}", projectedSpend, record.getMaxAmount());
             return ValidateTokenResponse.builder()
                     .valid(false)
                     .reason("AMOUNT_EXCEEDS_LIMIT")
@@ -160,28 +185,49 @@ public class TokenService {
 
     }
 
-    // 3. MARK AS USED
-// Called by sync-service AFTER successful settlement
+    // 3. RECORD SPEND
+// Called by sync-service AFTER each successful settlement.
+// Multiple offline payments on the SAME token settle one at a time, so this
+// accumulates spend instead of closing the token. The token flips to USED
+// only when cumulative spend reaches the reserved limit.
     @Transactional
     public void markAsUsed(@Valid MarkUsedRequest request) {
         TokenRecord record = tokenRepository.findByTokenValue(request.getToken())
                 .orElseThrow(() -> new TokenNotFoundException("Token not found for mark-used"));
-        // Idempotency guard — mark-used is one-time. The reservation is already
-        // settled the first time; a replay would fail ledger-side and surface as a 500.
+        // A closed token (USED/EXPIRED/INVALIDATED) can never receive more spend
         if (record.getStatus() != TokenStatus.ACTIVE) {
             throw new TokenAlreadyUsedException(record.getId().toString(), record.getStatus().name());
         }
-        record.setStatus(TokenStatus.USED);
-        record.setSpentAmount(request.getFinalSpentAmount());
-        record.setSettledAt(LocalDateTime.now());
-        tokenRepository.save(record);
-        log.info("Token marked as USED. tokenId={}, finalSpent={}",
-                record.getId(), request.getFinalSpentAmount());
+        BigDecimal alreadySpent = record.getSpentAmount() != null ? record.getSpentAmount() : BigDecimal.ZERO;
+        BigDecimal newSpent = alreadySpent.add(request.getFinalSpentAmount());
+        boolean fullySpent = newSpent.compareTo(record.getMaxAmount()) >= 0;
 
-        // Call ledger-service to settle the reservation (debit spent amount, release remainder)
-        ledgerServiceClient.settleReservation(record.getReservationId(), request.getFinalSpentAmount());
-        log.info("Ledger settlement completed. reservationId={}, spentAmount={}",
-                record.getReservationId(), request.getFinalSpentAmount());
+        record.setSpentAmount(newSpent);
+        if (fullySpent) {
+            record.setStatus(TokenStatus.USED);
+            record.setSettledAt(LocalDateTime.now());
+        }
+        tokenRepository.save(record);
+        log.info("Token spend recorded. tokenId={}, cumulativeSpent={}, fullySpent={}",
+                record.getId(), newSpent, fullySpent);
+    }
+
+    // 4b. READ-ONLY SPEND STATE (evidence for the dispute arbiter / AI judge)
+    // The arbiter needs authoritative "how much of this token is already
+    // spent?" to rule on conflicting receipts. Only bookkeeping state is
+    // returned — never the raw JWT.
+    public TokenSpendState getSpendState(String token) {
+        TokenRecord record = tokenRepository.findByTokenValue(token)
+                .orElseThrow(() -> new TokenNotFoundException("JWT not found in database"));
+        return TokenSpendState.builder()
+                .tokenId(record.getId())
+                .userId(record.getUserId())
+                .reservationId(record.getReservationId())
+                .maxAmount(record.getMaxAmount())
+                .spentAmount(record.getSpentAmount() != null ? record.getSpentAmount() : BigDecimal.ZERO)
+                .status(record.getStatus().name())
+                .expiresAt(record.getExpiresAt())
+                .build();
     }
 
     // 4. TOKEN HISTORY
@@ -193,6 +239,7 @@ public class TokenService {
                         .tokenId(record.getId())
                         .token(null)                // never return raw JWT in history
                         .userId(record.getUserId())
+                        .deviceId(record.getDeviceId())
                         .maxAmount(record.getMaxAmount())
                         .issuedAt(record.getCreatedAt())
                         .expiresAt(record.getExpiresAt())

@@ -10,6 +10,7 @@ import org.paron.fraudservice.model.FraudAlert;
 import org.paron.fraudservice.model.RiskLevel;
 import org.paron.fraudservice.service.FraudAlertService;
 import org.paron.fraudservice.service.FraudScoringService;
+import org.paron.fraudservice.repository.FraudAlertRepository;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -35,10 +36,12 @@ class FraudControllerTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final FraudScoringService fraudScoringService = mock();
     private final FraudAlertService fraudAlertService = mock();
+    private final FraudAlertRepository fraudAlertRepository = mock();
 
     @BeforeEach
     void setUp() {
-        mockMvc = standaloneSetup(new FraudController(fraudScoringService, fraudAlertService)).build();
+        mockMvc = standaloneSetup(
+                new FraudController(fraudScoringService, fraudAlertService, fraudAlertRepository)).build();
     }
 
     private TransactionEvent validEvent() {
@@ -63,6 +66,7 @@ class FraudControllerTest {
                         .score(0.0)
                         .approved(true)
                         .riskLevel(RiskLevel.LOW)
+                        .decision("APPROVE")
                         .triggeredRules(List.of())
                         .build()
         );
@@ -84,6 +88,7 @@ class FraudControllerTest {
                         .score(0.8)
                         .approved(false)
                         .riskLevel(RiskLevel.HIGH)
+                        .decision("REJECT")
                         .triggeredRules(List.of("AMOUNT_ANOMALY"))
                         .build()
         );

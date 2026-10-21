@@ -10,6 +10,7 @@ import org.paron.syncservice.kafka.TransactionProducer;
 import org.paron.syncservice.exception.SyncException;
 import org.paron.syncservice.model.OfflineTransaction;
 import org.paron.syncservice.repository.OfflineTransactionRepository;
+import org.paron.syncservice.signature.SignatureVerifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -31,6 +32,7 @@ public class SyncService {
 
     private final OfflineTransactionRepository transactionRepository;
     private final TransactionProducer transactionProducer;
+    private final SignatureVerifier signatureVerifier;
     private static final int MAX_BATCH_SIZE = 100;
 
     public SyncResponse submitTransactions(SyncRequest request, String userId) {
@@ -46,6 +48,17 @@ public class SyncService {
         for (OfflineTransactionDto txn : request.getTransactions()) {
             try {
                 txn.setUserId(userId);
+
+                // Signed-receipt gate (Step 0b): a transaction that cannot
+                // prove it was signed by its device key is either forged or
+                // tampered with — refuse it before it ever reaches Kafka.
+                if (!signatureVerifier.isValid(txn)) {
+                    failedIds.add(txn.getDeviceTransactionId());
+                    log.warn("Refusing transaction: signature invalid. deviceTransactionId={}",
+                            txn.getDeviceTransactionId());
+                    continue;
+                }
+
                 transactionProducer.publish(txn);
                 acceptedIds.add(txn.getDeviceTransactionId());
                 log.debug("Published to Kafka. deviceTransactionId={}, userId={}",

@@ -4,6 +4,7 @@ package org.paron.syncservice.client;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.paron.syncservice.dto.TokenSpendState;
 import org.paron.syncservice.dto.TokenValidationResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -26,18 +27,22 @@ public class TokenServiceClient {
     private String tokenServiceUrl;
 
     @Retry(name="tokenService")
-    public TokenValidationResult validateToken(String token, BigDecimal spentAmount){
+    public TokenValidationResult validateToken(String token, BigDecimal spentAmount, String deviceId){
         String url = tokenServiceUrl + "/api/v1/tokens/validate";
 
-        Map<String,Object> body = Map.of(
-                "token",token,
-                "spentAmount",spentAmount
-        );
+        Map<String,Object> body = new java.util.HashMap<>();
+        body.put("token", token);
+        body.put("spentAmount", spentAmount);
+        // Present the device that made the payment so token-service can enforce
+        // the token's device binding (a token spent from another device is rejected).
+        if (deviceId != null) {
+            body.put("deviceId", deviceId);
+        }
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<Map<String,Object>> requestEntity = new HttpEntity<>(body,headers);
 
-        log.info("Validating token with token-service. spentAmount={}", spentAmount);
+        log.info("Validating token with token-service. spentAmount={}, deviceId={}", spentAmount, deviceId);
         return restTemplate.postForObject(url, requestEntity, TokenValidationResult.class);
     }
     @Retry(name = "tokenService")
@@ -56,6 +61,16 @@ public class TokenServiceClient {
         log.info("Marking token as used. finalSpentAmount={}", finalSpentAmount);
 
         restTemplate.postForObject(url, requestEntity, Void.class);
+    }
+
+    /*
+     * Read-only spend-state evidence for the dispute arbiter ("AI judge").
+     * Throws on 4xx (unknown token) — callers decide how to handle it.
+     */
+    public TokenSpendState getSpendState(String token) {
+        String url = tokenServiceUrl + "/api/v1/tokens/state?token=" + token;
+        log.info("Fetching token spend state for dispute arbiter.");
+        return restTemplate.getForObject(url, TokenSpendState.class);
     }
 
 

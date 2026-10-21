@@ -1,0 +1,151 @@
+# OfflinePay AI — Fraud Detection v1
+
+I'd design your first version as a hybrid, offline-aware fraud detection system that builds on your existing Spring Boot microservices rather than replacing them.
+
+The goal is not simply to detect more fraud. It is to achieve three things:
+
+1. Protect the ledger against invalid authorizations, duplicate processing and spending-limit violations.
+2. Identify suspicious offline-payment behaviour when transactions synchronize with the backend.
+3. Avoid unnecessarily rejecting legitimate users because of weak signals such as unusual amounts, payment bursts or long offline periods.
+
+The key design decision is to separate security validation from fraud risk assessment. Security validation determines what the system must reject. Risk assessment helps decide what needs further review.
+
+## 1. Proposed architecture
+
+Offline payer / merchant
+
+Creates locally recorded payment claims while disconnected
+
+Connectivity returns
+
+Sync Service
+
+Receives pending transactions, validates the request format and queues processing through Kafka
+
+### Fraud Service — Java / Spring Boot
+
+A. Mandatory security checks
+
+Signature · Expiry · Reservation · Transaction idempotency · Token spending limit
+
+B. Feature extraction + existing rules
+
+Velocity · Amount deviation · Offline duration · Token claim conflicts
+
+C. ML inference — Python / FastAPI
+
+Combines behavioural signals into a risk score and returns reason codes
+
+D. Decision policy
+
+Eligible for settlement · Hold · Quarantine
+
+Ledger Service
+
+Atomically enforces the authorised spending cap and settles eligible claims.
+
+PostgreSQL + Redis
+
+Persist assessments and transaction state; support idempotency and fast lookups.
+
+What stays as it is: your API Gateway, Token Service, Ledger Service, Sync Service, Kafka and Redis. The first version should primarily refactor the existing Fraud Service and add ML inference if needed.
+
+The Python service is an inference component, not another source of financial truth. The Ledger Service remains authoritative for balances, reservations and settlement.
+
+## 2. What each fraud control does
+
+These are the controls I'd include in v1. The thresholds below are examples for testing, not production settings.
+
+| Control                         | Use case                                                  | Recommended action                                        |
+| ------------------------------- | --------------------------------------------------------- | --------------------------------------------------------- |
+| Signature and expiry validation | Token is tampered with or expired                         | Reject the claim                                          |
+| Transaction idempotency         | Same transaction is submitted multiple times              | Process it once                                           |
+| Token-level cumulative spending | Multiple claims exceed the reserved spending cap          | Enforce the cap atomically; quarantine conflicting claims |
+| Velocity analysis               | Six payments in a short interval                          | Add risk; don't automatically reject solely for this      |
+| Amount deviation                | Payment is unusually large for this user's history        | Add risk if sufficient history exists                     |
+| Offline duration                | Device reconnects after an unusually long offline period  | Add risk based on context                                 |
+| Merchant novelty                | User pays a merchant not seen in their history            | Weak risk signal only                                     |
+| Combined ML scoring             | Several individually weak signals occur together          | Help decide whether to settle or hold                     |
+| Risk audit trail                | A reviewer needs to understand why a transaction was held | Persist score, reason codes and model version             |
+
+### Example: how the controls work together
+
+Imagine a user makes a ₹120 canteen payment after being offline for 45 minutes.
+
+- The token signature is valid.
+- The token is within its expiry and spending limit.
+- The transaction has not been processed before.
+- The amount is consistent with the user's history.
+- The offline duration is somewhat unusual, but not conclusive.
+
+The transaction may be eligible for normal settlement.
+
+Now imagine the same token has two distinct claims totalling ₹700 against a ₹500 authorization. That is a spending-limit conflict, not merely a high ML score. The ledger must prevent settlement beyond the authorized limit, regardless of what the model predicts.
+
+## 3. How I would build it in phases
+
+Phase 1
+
+Harden the existing Java fraud engine
+
+Separate mandatory security checks from behavioural rules. Replace automatic rejection for weak signals with risk contributions, and keep the decision policy responsible for the final action.
+
+Deliverable: explainable rule-based baseline.
+
+Phase 2
+
+Add feature extraction and risk persistence
+
+Store a consistent feature vector for each transaction and persist `transaction_id`, `risk_score`, `risk_band`, `reason_codes`, `model_version`, `decision` and timestamp in PostgreSQL.
+
+Deliverable: traceable risk decisions and a reproducible evaluation dataset.
+
+Phase 3
+
+Train and integrate the ML model
+
+Start with CatBoost or another suitable tabular classifier. Use real public fraud data for a general benchmark and separately labelled offline-payment scenarios for token conflicts, synchronization delays and spending patterns.
+
+Deliverable: a versioned model served through Python/FastAPI, called by the Java Fraud Service.
+
+Phase 4
+
+Evaluate in shadow mode before enforcement
+
+Compare rules-only against rules-plus-ML on the same held-out data. Test legitimate payment bursts, unusual amounts, long offline periods, duplicate submissions and distinct claims against the same token.
+
+Deliverable: measured evidence of performance, false declines and latency before ML affects settlement.
+
+## 4. What to measure for your project
+
+- Fraud precision and recall: How many flagged transactions are actually fraudulent, and how many fraudulent cases are detected?
+- PR-AUC: How well does the model distinguish fraud in an imbalanced dataset?
+- False-decline rate: What fraction of legitimate transactions are rejected unnecessarily?
+- Hold rate: How many transactions need further review?
+- Inference latency: How much time does the ML service add to synchronization?
+- Security invariants: Can any invalid or over-limit transaction settle? The target is zero in your tests.
+
+For the false-decline claim, measure legitimate transactions incorrectly rejected by the decision policy. A reduction is meaningful only if fraud detection and financial controls remain effective.
+
+## 5. My final v1 scope
+
+Build one complete, measurable fraud pipeline, not a collection of loosely connected AI features:
+
+- Existing Java security checks and ledger protections.
+- Existing behavioural rules, reclassified as hard controls or soft risk signals.
+- A versioned feature extractor and persistent risk assessments.
+- One ML model that combines behavioural signals.
+- A three-state decision policy: eligible, hold, quarantine.
+- A test suite and evaluation report comparing the baseline against the hybrid system.
+
+This adapts Razorpay's layered security, behavioural analysis, risk scoring and false-positive monitoring to your offline-payment constraints.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://razorpay.com\&sz=32)
+
+Razorpay
+
++1
+
+
+
+One limitation to keep explicit in the demo: ML assesses risk after synchronization; it does not prevent offline double-spending at the moment a disconnected merchant accepts a payment. Your cryptographic authorization, token-level reconciliation and ledger controls address different parts of that problem.

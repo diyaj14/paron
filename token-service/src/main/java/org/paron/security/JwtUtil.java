@@ -30,6 +30,7 @@ import java.util.UUID;
  *   "sub":           "user_abc123",         <- subject = userId
  *   "tokenId":       "550e8400...",         <- our DB record ID
  *   "reservationId": "res_xyz789",
+ *   "deviceId":      "a1b2c3d4...",         <- device this token is bound to
  *   "maxAmount":     "500.00",
  *   "iat":           1705312800,            <- issued at (unix timestamp)
  *   "exp":           1705334400             <- expires at (unix timestamp)
@@ -57,6 +58,7 @@ public class JwtUtil {
      * @param userId         the user this token belongs to
      * @param tokenId        our DB record UUID (for correlation)
      * @param reservationId  the matching ledger reservation
+     * @param deviceId       the device this token is bound to
      * @param maxAmount      maximum amount user can spend offline
      * @param expiresAt      when this token becomes invalid
      * @return               signed JWT string like "eyJhbGci..."
@@ -65,6 +67,7 @@ public class JwtUtil {
             String userId,
             UUID tokenId,
             String reservationId,
+            String deviceId,
             BigDecimal maxAmount,
             LocalDateTime expiresAt) {
 
@@ -74,6 +77,7 @@ public class JwtUtil {
                 .subject(userId)                            // who owns this token
                 .claim("tokenId",       tokenId.toString())
                 .claim("reservationId", reservationId)
+                .claim("deviceId",      deviceId)           // bound device
                 .claim("maxAmount",     maxAmount.toPlainString())
                 // We do NOT put spentAmount in the JWT because it changes
                 // as the user makes payments. The DB is the source of truth for that.

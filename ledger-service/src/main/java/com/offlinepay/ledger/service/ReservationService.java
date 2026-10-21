@@ -38,10 +38,9 @@ public class ReservationService {
     @Value("${ledger.max-active-reserved:500.00}")
     private BigDecimal maxActiveReserved;
 
-    // ─────────────────────────────────────────────────────────────────────────
+
     // 1. RESERVE FUNDS
     // Called by token-service when a user requests an offline token.
-    // ─────────────────────────────────────────────────────────────────────────
 
     /*
      * Locks a portion of the user's available balance.
@@ -116,50 +115,78 @@ public class ReservationService {
                 .build();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // 2. RELEASE RESERVATION (full release — token expired unused)
     // Called by token-service's scheduled cleanup job.
-    // ─────────────────────────────────────────────────────────────────────────
 
+    /*
+     * Releases what is still locked on a reservation.
+     *
+     * Example: reserved ₹500, already settled ₹300 across earlier payments,
+     * then the token expired with ₹200 never spent.
+     *   -> the ₹200 (reserved minus already-settled) goes back to availableBalance
+     *   -> if nothing is left unused (fully spent), the reservation just closes
+     */
     @Transactional
     public void releaseReservation(ReleaseRequest request) {
         log.info("Release request: reservationId={}", request.getReservationId());
 
         Reservation reservation = findReservationOrThrow(request.getReservationId());
+        if (reservation.getStatus() != ReservationStatus.ACTIVE) {
+            throw new ReservationAlreadyClosedException(
+                    request.getReservationId(), reservation.getStatus().name());
+        }
+        String reservationUserId = reservation.getUserId();
 
+        // Lock the account row first — this serializes every balance change for
+        // this user (reserve/release/settle), so no concurrent settle can slip in.
+        Account account = accountRepository.findByUserIdForUpdate(reservationUserId)
+                .orElseThrow(() -> new AccountNotFoundException(reservationUserId));
+
+        // Re-read the reservation AFTER the account lock: by the time we got the
+        // lock, another transaction may have settled more of this reservation,
+        // so only the still-unsettled remainder is safe to return.
+        reservation = findReservationOrThrow(request.getReservationId());
         if (reservation.getStatus() != ReservationStatus.ACTIVE) {
             throw new ReservationAlreadyClosedException(
                     request.getReservationId(), reservation.getStatus().name());
         }
 
-        // Use the locking read here too — releasing also modifies the balance
-        Account account = accountRepository.findByUserIdForUpdate(reservation.getUserId())
-                .orElseThrow(() -> new AccountNotFoundException(reservation.getUserId()));
+        BigDecimal alreadySettled = reservation.getSettledAmount() != null
+                ? reservation.getSettledAmount()
+                : BigDecimal.ZERO;
+        BigDecimal remainder = reservation.getReservedAmount().subtract(alreadySettled);
 
-        // Give the full reserved amount back to available balance
-        account.setAvailableBalance(account.getAvailableBalance().add(reservation.getReservedAmount()));
-        account.setUpdatedAt(LocalDateTime.now());
-        accountRepository.save(account);
-
-        reservation.setStatus(ReservationStatus.RELEASED);
+        if (remainder.compareTo(BigDecimal.ZERO) > 0) {
+            // Return only the unspent part — the settled part is permanently gone
+            account.setAvailableBalance(account.getAvailableBalance().add(remainder));
+            account.setUpdatedAt(LocalDateTime.now());
+            accountRepository.save(account);
+            reservation.setStatus(ReservationStatus.RELEASED);
+        } else {
+            // Every payment was settled — nothing left to return, just close
+            reservation.setStatus(ReservationStatus.SETTLED);
+        }
         reservation.setClosedAt(LocalDateTime.now());
         reservationRepository.save(reservation);
 
         log.info("Reservation released. reservationId={}, amountReturned={}",
-                  reservation.getId(), reservation.getReservedAmount());
+                  reservation.getId(), remainder);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // 3. SETTLE RESERVATION (partial release — actual spending happened)
     // Will be called by sync-service once it's built in the next stage.
-    // ─────────────────────────────────────────────────────────────────────────
-
     /*
-     * Settles a reservation after offline spending.
+     * Incrementally settles a reservation, one payment at a time.
      *
-     * Example: reserved ₹500, user actually spent ₹300 offline.
-     *   -> debit ₹300 permanently from totalBalance (the money is truly gone)
-     *   -> the remaining ₹200 goes back to availableBalance (never spent, freed up)
+     * The reservation stays ACTIVE across multiple offline payments and only
+     * closes when the whole reserved amount has been spent:
+     *   reserved ₹500, payments arrive one by one:
+     *     settle ₹125 -> total −125, ₹375 still locked, reservation stays ACTIVE
+     *     settle ₹200 -> total −200, ₹175 still locked, reservation stays ACTIVE
+     *     settle ₹175 -> total −175, ₹0 left, reservation closes (SETTLED)
+     *
+     * Unspent money is NOT returned here — it stays locked while the token is
+     * still active. releaseReservation() returns it when the token closes.
      */
     @Transactional
     public SettleResponse settleReservation(SettleRequest request) {
@@ -167,52 +194,70 @@ public class ReservationService {
                   request.getReservationId(), request.getSpentAmount());
 
         Reservation reservation = findReservationOrThrow(request.getReservationId());
+        if (reservation.getStatus() != ReservationStatus.ACTIVE) {
+            throw new ReservationAlreadyClosedException(
+                    request.getReservationId(), reservation.getStatus().name());
+        }
+        String reservationUserId = reservation.getUserId();
 
+        Account account = accountRepository.findByUserIdForUpdate(reservationUserId)
+                .orElseThrow(() -> new AccountNotFoundException(reservationUserId));
+
+        // Re-read the reservation AFTER the account lock: the locked read
+        // serializes concurrent settles for the same user, so settledAmount
+        // here reflects every transaction that already committed.
+        reservation = findReservationOrThrow(request.getReservationId());
         if (reservation.getStatus() != ReservationStatus.ACTIVE) {
             throw new ReservationAlreadyClosedException(
                     request.getReservationId(), reservation.getStatus().name());
         }
 
-        if (request.getSpentAmount().compareTo(reservation.getReservedAmount()) > 0) {
+        BigDecimal alreadySettled = reservation.getSettledAmount() != null
+                ? reservation.getSettledAmount()
+                : BigDecimal.ZERO;
+        BigDecimal remaining = reservation.getReservedAmount().subtract(alreadySettled);
+
+        // A single payment must never push the reservation past its remaining
+        // (already-settled = what earlier payments committed on this token)
+        if (request.getSpentAmount().compareTo(remaining) > 0) {
             throw new LedgerException("SPENT_EXCEEDS_RESERVED",
                     "Spent amount " + request.getSpentAmount() +
-                    " exceeds reserved amount " + reservation.getReservedAmount());
+                    " exceeds remaining reserved amount " + remaining);
         }
 
-        Account account = accountRepository.findByUserIdForUpdate(reservation.getUserId())
-                .orElseThrow(() -> new AccountNotFoundException(reservation.getUserId()));
-
-        BigDecimal leftover = reservation.getReservedAmount().subtract(request.getSpentAmount());
-
-        // Permanently remove the spent amount from the total balance
+        // Permanently remove this payment from the total balance.
+        // The unspent remainder stays locked (available unchanged) until the
+        // token closes — releaseReservation() unlocks it then.
         account.setTotalBalance(account.getTotalBalance().subtract(request.getSpentAmount()));
-        // Return the unused leftover back to available balance
-        account.setAvailableBalance(account.getAvailableBalance().add(leftover));
         account.setUpdatedAt(LocalDateTime.now());
         accountRepository.save(account);
 
-        reservation.setSettledAmount(request.getSpentAmount());
-        reservation.setStatus(ReservationStatus.SETTLED);
-        reservation.setClosedAt(LocalDateTime.now());
+        BigDecimal newSettled = alreadySettled.add(request.getSpentAmount());
+        reservation.setSettledAmount(newSettled);
+
+        boolean fullySpent = newSettled.compareTo(reservation.getReservedAmount()) >= 0;
+        if (fullySpent) {
+            reservation.setStatus(ReservationStatus.SETTLED);
+            reservation.setClosedAt(LocalDateTime.now());
+        }
+
         reservationRepository.save(reservation);
 
-        log.info("Reservation settled. reservationId={}, spent={}, leftReleased={}",
-                  reservation.getId(), request.getSpentAmount(), leftover);
+        log.info("Reservation settled incrementally. reservationId={}, cumulativeSpent={}, " +
+                        "remainingLocked={}, fullySpent={}",
+                  reservation.getId(), newSettled, remaining.subtract(request.getSpentAmount()), fullySpent);
 
         return SettleResponse.builder()
                 .reservationId(request.getReservationId())
                 .spentAmount(request.getSpentAmount())
-                .releasedAmount(leftover)
+                .releasedAmount(BigDecimal.ZERO)   // nothing unlocked at settle time
                 .newTotalBalance(account.getTotalBalance())
                 .newAvailableBalance(account.getAvailableBalance())
                 .build();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // 4. CHECK BALANCE
     // Called by the mobile app to show "you can reserve up to ₹X offline".
-    // ─────────────────────────────────────────────────────────────────────────
-
     public BalanceResponse getBalance(String userId) {
         Account account = accountRepository.findByUserId(userId)
                 .orElseThrow(() -> new AccountNotFoundException(userId));
@@ -227,10 +272,8 @@ public class ReservationService {
                 .build();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Helper — shared lookup logic, since reservationId arrives as a String
     // over HTTP but is stored as a UUID primary key.
-    // ─────────────────────────────────────────────────────────────────────────
 
     private Reservation findReservationOrThrow(String reservationIdAsString) {
         UUID reservationId;

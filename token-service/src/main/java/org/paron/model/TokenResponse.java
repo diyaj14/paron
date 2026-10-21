@@ -15,6 +15,7 @@ import java.util.UUID;
  *   "tokenId":       "550e8400-e29b-41d4-a716-446655440000",
  *   "token":         "eyJhbGciOiJIUzUxMiJ9...",
  *   "userId":        "user_abc123",
+ *   "deviceId":      "a1b2c3d4-...",
  *   "maxAmount":     500.00,
  *   "expiresAt":     "2024-01-15T15:00:00",
  *   "status":        "ACTIVE"
@@ -28,6 +29,7 @@ public class TokenResponse {
     private UUID tokenId;           // DB primary key — useful for support queries
     private String token;           // The actual JWT string — store this on device
     private String userId;
+    private String deviceId;        // device this token is bound to
     private BigDecimal maxAmount;
     private LocalDateTime issuedAt;
     private LocalDateTime expiresAt;

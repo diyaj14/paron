@@ -30,9 +30,16 @@ public class TokenController {
         return ResponseEntity.status(HttpStatus.CREATED).body(tokenResponse);
     }
 
-    /*Validate token before transaction*/
+    /*Validate token before transaction (GET alias, kept for compatibility)*/
     @GetMapping("/validateToken")
     public ResponseEntity<ValidateTokenResponse> validate(@Valid @RequestBody ValidateTokenRequest request){
+        ValidateTokenResponse validate =tokenService.validate(request);
+        return ResponseEntity.ok(validate);
+    }
+
+    /*Validate token before transaction (POST — what sync-service calls)*/
+    @PostMapping("/validate")
+    public ResponseEntity<ValidateTokenResponse> validatePost(@Valid @RequestBody ValidateTokenRequest request){
         ValidateTokenResponse validate =tokenService.validate(request);
         return ResponseEntity.ok(validate);
     }
@@ -53,6 +60,13 @@ public class TokenController {
     public ResponseEntity<List<TokenResponse>> getTokenHistory(@PathVariable String userId){
         List<TokenResponse> response=tokenService.getTokenHistory(userId);
         return ResponseEntity.ok(response);
+    }
+
+    /*Read-only spend state — the authoritative "how much spent?" evidence
+    the dispute arbiter consumes to rule on conflicting receipts.*/
+    @GetMapping("/state")
+    public ResponseEntity<TokenSpendState> spendState(@RequestParam String token) {
+        return ResponseEntity.ok(tokenService.getSpendState(token));
     }
 
 

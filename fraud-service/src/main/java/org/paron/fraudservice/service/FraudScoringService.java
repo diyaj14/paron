@@ -4,13 +4,22 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.paron.fraudservice.dto.TransactionEvent;
 import org.paron.fraudservice.dto.FraudAlertResponse;
+import org.paron.fraudservice.feature.RiskFeatureBuilder;
+import org.paron.fraudservice.feature.RiskFeatureVector;
 import org.paron.fraudservice.model.RiskLevel;
+import org.paron.fraudservice.policy.DecisionPolicy;
+import org.paron.fraudservice.policy.DecisionResult;
+import org.paron.fraudservice.policy.DecisionType;
+import org.paron.fraudservice.policy.ModelClient;
+import org.paron.fraudservice.policy.ModelOutput;
 import org.paron.fraudservice.rules.FraudRule;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -18,6 +27,10 @@ import java.util.List;
 public class FraudScoringService {
 
     private final List<FraudRule> rules;
+    private final DecisionPolicy decisionPolicy;
+    private final ModelClient modelClient;
+    private final RiskFeatureBuilder featureBuilder;
+    private final RiskAssessmentService assessmentService;
 
     @Value("${fraud.score-threshold:0.7}")
     private double scoreThreshold;
@@ -34,12 +47,49 @@ public class FraudScoringService {
             }
         }
 
-        boolean approved = totalScore < scoreThreshold;
+        RiskFeatureVector featureVector = featureBuilder.build(event);
+        Map<String, Double> features = featureVector.toMap();
+        String correlationId = UUID.randomUUID().toString();
+        ModelOutput modelOutput = modelClient.score(features, correlationId);
+
+        DecisionResult decisionResult = decisionPolicy.decide(triggeredRules, modelOutput);
+
+        /*
+         * Low-signal guard ("a brand-new device never auto-approves").
+         * A user/device with zero 24h history carries too little information
+         * to approve on model confidence alone — surface it to an analyst for
+         * review instead. A hard rule hit still rejects; only a would-be
+         * APPROVE is downgraded to HOLD_FOR_REVIEW. Surfaces the exact
+         * unregistered-device gap the fraud drill flags.
+         */
+        boolean lowSignal = featureVector.historyAvailable() == null
+                || featureVector.historyAvailable() == 0;
+        if (lowSignal && decisionResult.getDecision() == DecisionType.APPROVE) {
+            decisionResult = DecisionResult.builder()
+                    .decision(DecisionType.HOLD_FOR_REVIEW)
+                    .reason("low_information_new_device")
+                    .triggeredRules(decisionResult.getTriggeredRules())
+                    .score(decisionResult.getScore())
+                    .confidence(decisionResult.getConfidence())
+                    .build();
+            log.info("fraud low-signal guard userId={}, APPROVE downgraded to HOLD_FOR_REVIEW",
+                    event.getUserId());
+        }
+
+        boolean approved = decisionResult.getDecision() == DecisionType.APPROVE;
         double clampedScore = Math.min(totalScore, 1.0);
         RiskLevel riskLevel = mapRiskLevel(clampedScore);
 
-        log.info("fraud check userId={},score={},approved={},rules={}",
-                event.getUserId(), clampedScore, approved, triggeredRules);
+        List<String> reasonCodes = modelOutput != null && modelOutput.getTopContributions() != null ?
+                modelOutput.getTopContributions().stream()
+                        .map(ModelOutput.Contribution::getReasonCode)
+                        .toList() : List.of();
+
+        assessmentService.record(event.getDeviceTransactionId(), decisionResult, modelOutput, reasonCodes);
+
+        log.info("fraud check userId={},decision={},score={},rules={},modelScore={}",
+                event.getUserId(), decisionResult.getDecision(), clampedScore,
+                triggeredRules, modelOutput != null ? modelOutput.getScore() : null);
 
         return FraudAlertResponse.builder()
                 .transactionId(event.getDeviceTransactionId())
@@ -47,6 +97,11 @@ public class FraudScoringService {
                 .approved(approved)
                 .riskLevel(riskLevel)
                 .triggeredRules(triggeredRules)
+                .decision(decisionResult.getDecision().name())
+                .confidence(modelOutput != null ? modelOutput.getConfidence() : null)
+                .modelVersion(modelOutput != null ? modelOutput.getModelVersion() : null)
+                .policyVersion("thresholds-v1")
+                .reasonCodes(reasonCodes)
                 .build();
     }
 

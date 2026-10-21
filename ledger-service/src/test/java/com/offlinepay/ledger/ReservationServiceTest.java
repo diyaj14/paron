@@ -3,7 +3,10 @@ package com.offlinepay.ledger;
 import com.offlinepay.ledger.dto.ReleaseRequest;
 import com.offlinepay.ledger.dto.ReserveRequest;
 import com.offlinepay.ledger.dto.ReserveResponse;
+import com.offlinepay.ledger.dto.SettleRequest;
+import com.offlinepay.ledger.dto.SettleResponse;
 import com.offlinepay.ledger.exception.InsufficientFundsException;
+import com.offlinepay.ledger.exception.LedgerException;
 import com.offlinepay.ledger.model.Account;
 import com.offlinepay.ledger.model.Reservation;
 import com.offlinepay.ledger.model.ReservationStatus;
@@ -16,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -48,6 +52,7 @@ class ReservationServiceTest {
                 .totalBalance(new BigDecimal("2000.00"))
                 .availableBalance(new BigDecimal("500.00"))
                 .build();
+        ReflectionTestUtils.setField(reservationService, "maxActiveReserved", new BigDecimal("500.00"));
     }
 
     @Test
@@ -59,6 +64,8 @@ class ReservationServiceTest {
 
         when(accountRepository.findByUserIdForUpdate("user_test_123"))
                 .thenReturn(Optional.of(testAccount));
+        when(reservationRepository.sumReservedAmountByUserIdAndStatus("user_test_123", ReservationStatus.ACTIVE))
+                .thenReturn(BigDecimal.ZERO);
 
         Reservation savedReservation = Reservation.builder()
                 .id(UUID.randomUUID())
@@ -121,5 +128,90 @@ class ReservationServiceTest {
         // THEN — available balance should be 200 + 300 = 500 again
         assertThat(testAccount.getAvailableBalance()).isEqualByComparingTo("500.00");
         assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.RELEASED);
+    }
+
+    @Test
+    void settleReservation_whenMultiplePayments_shouldAccumulateAndStayActive() {
+        // GIVEN — ₹500 reserved, ₹125 already settled across earlier payments
+        UUID reservationId = UUID.randomUUID();
+        Reservation reservation = Reservation.builder()
+                .id(reservationId)
+                .userId("user_test_123")
+                .reservedAmount(new BigDecimal("500.00"))
+                .settledAmount(new BigDecimal("125.00"))
+                .status(ReservationStatus.ACTIVE)
+                .build();
+        testAccount.setTotalBalance(new BigDecimal("2000.00"));
+        testAccount.setAvailableBalance(new BigDecimal("0.00"));
+
+        when(reservationRepository.findById(reservationId)).thenReturn(Optional.of(reservation));
+        when(accountRepository.findByUserIdForUpdate("user_test_123"))
+                .thenReturn(Optional.of(testAccount));
+
+        SettleRequest request = new SettleRequest();
+        request.setReservationId(reservationId.toString());
+        request.setSpentAmount(new BigDecimal("200.00"));
+
+        // WHEN — a second payment of ₹200 settles
+        SettleResponse response = reservationService.settleReservation(request);
+
+        // THEN — total debited, remainder stays locked, reservation stays ACTIVE
+        assertThat(response.getSpentAmount()).isEqualByComparingTo("200.00");
+        assertThat(testAccount.getTotalBalance()).isEqualByComparingTo("1800.00");
+        assertThat(testAccount.getAvailableBalance()).isEqualByComparingTo("0.00");
+        assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.ACTIVE);
+        assertThat(reservation.getSettledAmount()).isEqualByComparingTo("325.00");
+    }
+
+    @Test
+    void settleReservation_whenFullySpent_shouldCloseReservation() {
+        // GIVEN — ₹500 reserved, ₹325 already settled, ₹175 being paid now
+        UUID reservationId = UUID.randomUUID();
+        Reservation reservation = Reservation.builder()
+                .id(reservationId)
+                .userId("user_test_123")
+                .reservedAmount(new BigDecimal("500.00"))
+                .settledAmount(new BigDecimal("325.00"))
+                .status(ReservationStatus.ACTIVE)
+                .build();
+        testAccount.setTotalBalance(new BigDecimal("2000.00"));
+
+        when(reservationRepository.findById(reservationId)).thenReturn(Optional.of(reservation));
+        when(accountRepository.findByUserIdForUpdate("user_test_123"))
+                .thenReturn(Optional.of(testAccount));
+
+        SettleRequest request = new SettleRequest();
+        request.setReservationId(reservationId.toString());
+        request.setSpentAmount(new BigDecimal("175.00"));
+
+        reservationService.settleReservation(request);
+
+        assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.SETTLED);
+        assertThat(reservation.getSettledAmount()).isEqualByComparingTo("500.00");
+    }
+
+    @Test
+    void settleReservation_whenOverspendOnRemaining_shouldReject() {
+        // GIVEN — only ₹50 remains, payment asks for ₹100
+        UUID reservationId = UUID.randomUUID();
+        Reservation reservation = Reservation.builder()
+                .id(reservationId)
+                .userId("user_test_123")
+                .reservedAmount(new BigDecimal("500.00"))
+                .settledAmount(new BigDecimal("450.00"))
+                .status(ReservationStatus.ACTIVE)
+                .build();
+
+        when(reservationRepository.findById(reservationId)).thenReturn(Optional.of(reservation));
+        when(accountRepository.findByUserIdForUpdate("user_test_123"))
+                .thenReturn(Optional.of(testAccount));
+
+        SettleRequest request = new SettleRequest();
+        request.setReservationId(reservationId.toString());
+        request.setSpentAmount(new BigDecimal("100.00"));
+
+        assertThatThrownBy(() -> reservationService.settleReservation(request))
+                .isInstanceOf(LedgerException.class)
+                .hasMessageContaining("exceeds remaining reserved amount");
     }
 }

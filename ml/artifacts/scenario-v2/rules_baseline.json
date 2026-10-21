@@ -1,0 +1,15 @@
+{
+  "threshold": 0.7,
+  "precision": 0.0,
+  "recall": 0.0,
+  "f1": 0.0,
+  "pr_auc": 0.1726,
+  "confusion_matrix": {
+    "tn": 1709,
+    "fp": 0,
+    "fn": 364,
+    "tp": 0
+  },
+  "false_positive_rupee_cost": 0.0,
+  "sample_count": 2073
+}

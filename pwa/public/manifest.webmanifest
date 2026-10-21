@@ -1,0 +1,13 @@
+{
+  "name": "Paron Offline Wallet",
+  "short_name": "Paron",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#071326",
+  "theme_color": "#0a6cff",
+  "description": "Offline payment demonstration wallet for Paron.",
+  "icons": [
+    { "src": "./icons/paron.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icons/paron-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

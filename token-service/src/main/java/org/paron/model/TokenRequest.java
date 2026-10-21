@@ -12,6 +12,7 @@ import java.math.BigDecimal;
  * Example JSON body:
  * {
  *   "userId":       "user_abc123",
+ *   "deviceId":     "a1b2c3d4-...",
  *   "amount":       500.00,
  *   "expiryHours":  6
  * }
@@ -27,6 +28,11 @@ public class TokenRequest {
 
     @NotBlank(message = "userId is required")
     private String userId;
+
+    // The device that requested this token. The issued token is bound to it,
+    // so it can only be validated/spent from this same device.
+    @NotBlank(message = "deviceId is required")
+    private String deviceId;
 
     @NotNull(message = "amount is required")
     @DecimalMin(value = "1.00", message = "Minimum offline amount is ₹1")

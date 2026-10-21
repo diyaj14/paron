@@ -5,6 +5,8 @@ import org.paron.model.TokenResponse;
 import org.paron.exception.ActiveTokenExsistsException;
 import org.paron.model.TokenRecord;
 import org.paron.model.TokenStatus;
+import org.paron.model.ValidateTokenRequest;
+import org.paron.model.ValidateTokenResponse;
 import org.paron.repo.TokenRepository;
 import org.paron.security.JwtUtil;
 import org.paron.service.LedgerServiceClient;
@@ -12,6 +14,7 @@ import org.paron.service.TokenService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import io.jsonwebtoken.Claims;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -54,6 +57,7 @@ class TokenServiceTest{
     void setUp(){
         validRequest = new TokenRequest();
         validRequest.setUserId("user_test_123");
+        validRequest.setDeviceId("device_test_123");
         validRequest.setAmount(new BigDecimal("500.00"));
         validRequest.setExpiryHours(6);
     }
@@ -70,6 +74,7 @@ class TokenServiceTest{
         TokenRecord savedRecord = TokenRecord.builder()
                 .id(UUID.randomUUID())
                 .userId("user_test_123")
+                .deviceId("device_test_123")
                 .reservationId("res_abc123")
                 .tokenValue("PENDING")
                 .maxAmount(new BigDecimal("500.00"))
@@ -78,13 +83,14 @@ class TokenServiceTest{
                 .expiresAt(LocalDateTime.now().plusHours(6))
                 .build();
         when(tokenRepository.save(any(TokenRecord.class))).thenReturn(savedRecord);
-        when(jwtUtil.generateOfflineToken(any(), any(), any(), any(), any()))
+        when(jwtUtil.generateOfflineToken(any(), any(), any(), any(), any(), any()))
                 .thenReturn("eyJmakeJWT123");
         // WHEN — we request a token
         TokenResponse response = tokenService.generateToken(validRequest);
         // THEN — token is issued
         assertThat(response).isNotNull();
         assertThat(response.getUserId()).isEqualTo("user_test_123");
+        assertThat(response.getDeviceId()).isEqualTo("device_test_123");
         assertThat(response.getMaxAmount()).isEqualByComparingTo("500.00");
         assertThat(response.getStatus()).isEqualTo("ACTIVE");
 
@@ -107,6 +113,67 @@ class TokenServiceTest{
         verify(ledgerServiceClient,never()).reserveFunds(any(),any());
 
 
+        }
+
+        @Test
+        void validate_whenDeviceDoesNotMatch_shouldReturnInvalid() {
+            // GIVEN — a token bound to device_A, presented from device_B
+            TokenRecord record = TokenRecord.builder()
+                    .id(UUID.randomUUID())
+                    .userId("user_test_123")
+                    .deviceId("device_A")
+                    .reservationId("res_abc123")
+                    .tokenValue("eyJvalid")
+                    .maxAmount(new BigDecimal("500.00"))
+                    .spentAmount(BigDecimal.ZERO)
+                    .status(TokenStatus.ACTIVE)
+                    .expiresAt(LocalDateTime.now().plusHours(6))
+                    .build();
+            when(jwtUtil.validateAndExtractClaims("eyJvalid")).thenReturn(Mockito.mock(Claims.class));
+            when(tokenRepository.findByTokenValue("eyJvalid")).thenReturn(java.util.Optional.of(record));
+
+            ValidateTokenRequest request = new ValidateTokenRequest();
+            request.setToken("eyJvalid");
+            request.setSpentAmount(new BigDecimal("150.00"));
+            request.setDeviceId("device_B");
+
+            // WHEN
+            ValidateTokenResponse response = tokenService.validate(request);
+
+            // THEN — rejected on device binding, even though signature/status/amount are fine
+            assertThat(response.isValid()).isFalse();
+            assertThat(response.getReason()).isEqualTo("DEVICE_MISMATCH");
+        }
+
+        @Test
+        void validate_whenDeviceMatches_shouldReturnValid() {
+            // GIVEN — a token bound to device_A, presented from device_A
+            TokenRecord record = TokenRecord.builder()
+                    .id(UUID.randomUUID())
+                    .userId("user_test_123")
+                    .deviceId("device_A")
+                    .reservationId("res_abc123")
+                    .tokenValue("eyJvalid")
+                    .maxAmount(new BigDecimal("500.00"))
+                    .spentAmount(BigDecimal.ZERO)
+                    .status(TokenStatus.ACTIVE)
+                    .expiresAt(LocalDateTime.now().plusHours(6))
+                    .build();
+            when(jwtUtil.validateAndExtractClaims("eyJvalid")).thenReturn(Mockito.mock(Claims.class));
+            when(tokenRepository.findByTokenValue("eyJvalid")).thenReturn(java.util.Optional.of(record));
+
+            ValidateTokenRequest request = new ValidateTokenRequest();
+            request.setToken("eyJvalid");
+            request.setSpentAmount(new BigDecimal("150.00"));
+            request.setDeviceId("device_A");
+
+            // WHEN
+            ValidateTokenResponse response = tokenService.validate(request);
+
+            // THEN
+            assertThat(response.isValid()).isTrue();
+            assertThat(response.getUserId()).isEqualTo("user_test_123");
+            assertThat(response.getReservationId()).isEqualTo("res_abc123");
         }
     }
 
