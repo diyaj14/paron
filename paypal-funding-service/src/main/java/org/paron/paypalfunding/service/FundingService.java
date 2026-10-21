@@ -19,8 +19,12 @@ public class FundingService {
     private final FundingAttemptRepository attempts;
     private final PaypalClient paypal;
     private final LedgerClient ledger;
-    @Value("${paypal.currency}") private String currency;
-    @Value("${paypal.maximum-amount}") private BigDecimal maximumAmount;
+
+    @Value("${paypal.currency}") 
+    private String currency;
+
+    @Value("${paypal.maximum-amount}") 
+    private BigDecimal maximumAmount;
 
     @Transactional
     public FundingResponse create(CreateFundingRequest request) {
@@ -30,7 +34,8 @@ public class FundingService {
                 .amount(amount).currency(currency).status(FundingStatus.CREATED).build());
         JsonNode response = paypal.createOrder(amount, currency);
         String orderId = required(response, "id");
-        attempt.setPaypalOrderId(orderId); attempt.setStatus(FundingStatus.PAYER_ACTION_REQUIRED);
+        attempt.setPaypalOrderId(orderId); 
+        attempt.setStatus(FundingStatus.PAYER_ACTION_REQUIRED);
         return FundingResponse.from(attempt, approvalUrl(response));
     }
 
@@ -52,7 +57,8 @@ public class FundingService {
                 || !attempt.getCurrency().equals(capture.at("/amount/currency_code").asText())) {
             attempt.setStatus(FundingStatus.FAILED); throw new FundingVerificationException("Captured amount, currency, or status does not match funding attempt");
         }
-        attempt.setPaypalCaptureId(required(capture, "id")); attempt.setStatus(FundingStatus.CAPTURED);
+        attempt.setPaypalCaptureId(required(capture, "id"));
+        attempt.setStatus(FundingStatus.CAPTURED);
         ledger.credit(attempt.getId(), attempt.getUserId(), attempt.getAmount());
         attempt.setStatus(FundingStatus.CREDITED);
         return FundingResponse.from(attempt, null);

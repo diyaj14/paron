@@ -58,7 +58,7 @@ P0
 
 Create a PayPal Developer Sandbox app and configure credentials using environment variables.
 
-Implement server-side PayPal Orders API order creation.
+Implement server-side PayPal Orders API order creation.(capture and create)
 
 Implement server-side order capture and verify the returned capture status.
 

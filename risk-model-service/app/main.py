@@ -1,7 +1,8 @@
 """Paron Guard Risk Model Service — FastAPI application.
 
 Serves POST /v1/score and GET /healthz.
-Loads only from artifacts/approved/<version>/.
+Loads the primary model from artifacts/approved/<version>/ and can optionally
+score a candidate in shadow mode.
 """
 
 import os
@@ -16,6 +17,10 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 MODEL_DIR = Path(os.getenv("MODEL_DIR", "./artifacts/approved"))
+# Optional candidate directory. When supplied, the candidate is scored for
+# observation only; the primary approved model remains the response used by
+# the settlement policy.
+SHADOW_MODEL_DIR = os.getenv("SHADOW_MODEL_DIR", "").strip()
 SUPPORTED_SCHEMA_VERSIONS = ["v1"]
 MODEL_VERSION = "lr-calibrated-v1.0.0"
 THRESHOLD_POLICY_VERSION = "thresholds-v1"
@@ -54,17 +59,31 @@ REASON_CODE_MAP = {
 }
 
 model = None
+shadow_model = None
+shadow_model_version = None
 
 
 def load_model():
-    global model
+    global model, shadow_model, shadow_model_version
     for version_dir in sorted(MODEL_DIR.iterdir()):
         if version_dir.is_dir():
             model_path = version_dir / "model.joblib"
             if model_path.exists():
                 model = load(model_path)
-                return True
-    return False
+                break
+    if model is None:
+        return False
+
+    if SHADOW_MODEL_DIR:
+        candidate_dir = Path(SHADOW_MODEL_DIR)
+        candidate_model_path = candidate_dir / "model.joblib"
+        candidate_manifest_path = candidate_dir / "manifest.json"
+        if not candidate_model_path.exists() or not candidate_manifest_path.exists():
+            raise RuntimeError("SHADOW_MODEL_DIR must contain model.joblib and manifest.json")
+        import json
+        shadow_model = load(candidate_model_path)
+        shadow_model_version = json.loads(candidate_manifest_path.read_text(encoding="utf-8"))["model_version"]
+    return True
 
 
 @asynccontextmanager
@@ -98,6 +117,7 @@ class ScoreResponse(BaseModel):
     thresholdPolicyVersion: str
     featureSchemaVersion: str
     topContributions: list[Contribution]
+    shadowAssessment: dict | None = None
 
 
 def compute_confidence(score: float) -> float:
@@ -176,6 +196,16 @@ async def score(request: ScoreRequest):
     score_val = round(float(proba), 4)
     confidence = compute_confidence(score_val)
 
+    shadow_assessment = None
+    if shadow_model is not None:
+        shadow_score = round(float(shadow_model.predict_proba(X)[0, 1]), 4)
+        shadow_assessment = {
+            "score": shadow_score,
+            "confidence": compute_confidence(shadow_score),
+            "modelVersion": shadow_model_version,
+            "mode": "SHADOW",
+        }
+
     coefficients = model.calibrated_classifiers_[0].estimator.named_steps["clf"].coef_[0]
     contributions = get_top_contributions(request.features, coefficients)
 
@@ -188,6 +218,7 @@ async def score(request: ScoreRequest):
         thresholdPolicyVersion=THRESHOLD_POLICY_VERSION,
         featureSchemaVersion=request.featureSchemaVersion,
         topContributions=contributions,
+        shadowAssessment=shadow_assessment,
     )
 
 
@@ -197,6 +228,7 @@ async def healthz():
         "status": "ok",
         "modelVersion": MODEL_VERSION,
         "featureSchemaVersions": SUPPORTED_SCHEMA_VERSIONS,
+        "shadowModelVersion": shadow_model_version,
     }
 
 

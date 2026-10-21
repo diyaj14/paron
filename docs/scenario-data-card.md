@@ -46,6 +46,20 @@ The resulting candidate is intentionally not copied to
 `risk-model-service/artifacts/approved/`. It must run in shadow mode and be
 reviewed against real settlement outcomes before it can influence policy.
 
+To run the candidate in shadow mode on Windows, keep the approved v1 model in
+place and start the model service as follows:
+
+```powershell
+$env:SHADOW_MODEL_DIR = (Resolve-Path "ml/artifacts/scenario-v2")
+cd risk-model-service
+uvicorn app.main:app --port 8600
+```
+
+`POST /v1/score` then returns `shadowAssessment` alongside the primary score.
+The fraud service records both scores, versions, decision, reason codes and
+assessment timestamp in `risk_assessments`; only the primary score is passed
+to `DecisionPolicy`.
+
 ## Limitations
 
 Scenario prevalence, labels and behaviour are design assumptions. The reported

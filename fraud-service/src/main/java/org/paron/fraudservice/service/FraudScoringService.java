@@ -30,6 +30,7 @@ public class FraudScoringService {
     private final DecisionPolicy decisionPolicy;
     private final ModelClient modelClient;
     private final RiskFeatureBuilder featureBuilder;
+    private final RiskAssessmentService assessmentService;
 
     @Value("${fraud.score-threshold:0.7}")
     private double scoreThreshold;
@@ -83,6 +84,8 @@ public class FraudScoringService {
                 modelOutput.getTopContributions().stream()
                         .map(ModelOutput.Contribution::getReasonCode)
                         .toList() : List.of();
+
+        assessmentService.record(event.getDeviceTransactionId(), decisionResult, modelOutput, reasonCodes);
 
         log.info("fraud check userId={},decision={},score={},rules={},modelScore={}",
                 event.getUserId(), decisionResult.getDecision(), clampedScore,

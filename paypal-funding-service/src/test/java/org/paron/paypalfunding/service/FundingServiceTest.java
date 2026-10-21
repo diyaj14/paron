@@ -22,10 +22,18 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class FundingServiceTest {
-    @Mock FundingAttemptRepository attempts;
-    @Mock PaypalClient paypal;
-    @Mock LedgerClient ledger;
-    @InjectMocks FundingService service;
+    @Mock 
+    FundingAttemptRepository attempts;
+
+    @Mock 
+    PaypalClient paypal;
+
+    @Mock 
+    LedgerClient ledger;
+
+    @InjectMocks 
+    FundingService service;
+    
     private final ObjectMapper json = new ObjectMapper();
 
     @Test

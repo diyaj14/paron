@@ -14,6 +14,15 @@ public class ModelOutput {
     private String modelVersion;
     private String thresholdPolicyVersion;
     private List<Contribution> topContributions;
+    private ShadowAssessment shadowAssessment;
+
+    @Data
+    @Builder
+    public static class ShadowAssessment {
+        private double score;
+        private double confidence;
+        private String modelVersion;
+    }
 
     @Data
     @Builder

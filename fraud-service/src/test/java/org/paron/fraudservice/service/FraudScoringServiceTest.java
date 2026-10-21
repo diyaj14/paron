@@ -27,6 +27,7 @@ class FraudScoringServiceTest {
     private DecisionPolicy decisionPolicy;
     private ModelClient modelClient;
     private RiskFeatureBuilder featureBuilder;
+    private RiskAssessmentService assessmentService;
 
     private static final RiskFeatureVector EMPTY_VECTOR = new RiskFeatureVector(
             "v1", 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0.0, 0, 0, 1, 1, 1
@@ -37,11 +38,12 @@ class FraudScoringServiceTest {
         decisionPolicy = mock(DecisionPolicy.class);
         modelClient = mock(ModelClient.class);
         featureBuilder = mock(RiskFeatureBuilder.class);
+        assessmentService = mock(RiskAssessmentService.class);
         when(featureBuilder.build(any())).thenReturn(EMPTY_VECTOR);
     }
 
     private FraudScoringService buildService(List<FraudRule> rules) {
-        return new FraudScoringService(rules, decisionPolicy, modelClient, featureBuilder);
+        return new FraudScoringService(rules, decisionPolicy, modelClient, featureBuilder, assessmentService);
     }
 
     private TransactionEvent buildEvent() {
@@ -94,6 +96,23 @@ class FraudScoringServiceTest {
 
         assertFalse(result.isApproved());
         assertEquals(DecisionType.HOLD_FOR_REVIEW.name(), result.getDecision());
+    }
+
+    @Test
+    void shadowScoreIsRecordedButCannotChangePrimaryDecision() {
+        ModelOutput primary = ModelOutput.builder()
+                .score(0.05).confidence(0.95).modelVersion("lr-calibrated-v1.0.0")
+                .shadowAssessment(ModelOutput.ShadowAssessment.builder()
+                        .score(0.99).confidence(0.99).modelVersion("lr-calibrated-v2.0.0-scenario").build())
+                .build();
+        when(modelClient.score(any(), any())).thenReturn(primary);
+        when(decisionPolicy.decide(eq(List.of()), same(primary)))
+                .thenReturn(DecisionResult.builder().decision(DecisionType.APPROVE).reason("score_below_threshold").build());
+
+        FraudAlertResponse result = buildService(Collections.emptyList()).evaluate(buildEvent());
+
+        assertTrue(result.isApproved());
+        verify(assessmentService).record(eq("txn-1"), any(), same(primary), any());
     }
 
     @Test

@@ -54,6 +54,13 @@ public class ModelClient {
                                 .plainLanguage((String) c.get("plainLanguage"))
                                 .weight(((Number) c.get("weight")).doubleValue())
                                 .build()).toList() : List.of();
+                Map<String, Object> shadow = (Map<String, Object>) body.get("shadowAssessment");
+                ModelOutput.ShadowAssessment shadowAssessment = shadow == null ? null :
+                        ModelOutput.ShadowAssessment.builder()
+                                .score(((Number) shadow.get("score")).doubleValue())
+                                .confidence(((Number) shadow.get("confidence")).doubleValue())
+                                .modelVersion((String) shadow.get("modelVersion"))
+                                .build();
 
                 return ModelOutput.builder()
                         .score(((Number) body.get("score")).doubleValue())
@@ -62,6 +69,7 @@ public class ModelClient {
                         .modelVersion((String) body.get("modelVersion"))
                         .thresholdPolicyVersion((String) body.get("thresholdPolicyVersion"))
                         .topContributions(contribList)
+                        .shadowAssessment(shadowAssessment)
                         .build();
             }
 
