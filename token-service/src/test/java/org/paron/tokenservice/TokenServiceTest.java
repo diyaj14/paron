@@ -129,7 +129,8 @@ class TokenServiceTest{
                     .status(TokenStatus.ACTIVE)
                     .expiresAt(LocalDateTime.now().plusHours(6))
                     .build();
-            when(jwtUtil.validateAndExtractClaims("eyJvalid")).thenReturn(Mockito.mock(Claims.class));
+            Claims matchingClaims = validClaims(record);
+            when(jwtUtil.validateAndExtractClaims("eyJvalid")).thenReturn(matchingClaims);
             when(tokenRepository.findByTokenValue("eyJvalid")).thenReturn(java.util.Optional.of(record));
 
             ValidateTokenRequest request = new ValidateTokenRequest();
@@ -159,7 +160,8 @@ class TokenServiceTest{
                     .status(TokenStatus.ACTIVE)
                     .expiresAt(LocalDateTime.now().plusHours(6))
                     .build();
-            when(jwtUtil.validateAndExtractClaims("eyJvalid")).thenReturn(Mockito.mock(Claims.class));
+            Claims matchingClaims = validClaims(record);
+            when(jwtUtil.validateAndExtractClaims("eyJvalid")).thenReturn(matchingClaims);
             when(tokenRepository.findByTokenValue("eyJvalid")).thenReturn(java.util.Optional.of(record));
 
             ValidateTokenRequest request = new ValidateTokenRequest();
@@ -175,5 +177,15 @@ class TokenServiceTest{
             assertThat(response.getUserId()).isEqualTo("user_test_123");
             assertThat(response.getReservationId()).isEqualTo("res_abc123");
         }
+    private Claims validClaims(TokenRecord record) {
+        Claims claims = Mockito.mock(Claims.class);
+        when(claims.getSubject()).thenReturn(record.getUserId());
+        when(claims.get("tokenId", String.class)).thenReturn(record.getId().toString());
+        when(claims.get("reservationId", String.class)).thenReturn(record.getReservationId());
+        when(claims.get("deviceId", String.class)).thenReturn(record.getDeviceId());
+        when(claims.get("maxAmount", String.class)).thenReturn(record.getMaxAmount().toPlainString());
+        return claims;
     }
+
+}
 

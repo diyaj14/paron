@@ -101,6 +101,7 @@ def compute_metrics(y_true, y_prob, threshold, fp_cost_per=500.0):
         "pr_auc": round(float(average_precision_score(y_true, y_prob)), 4),
         "roc_auc": round(float(roc_auc_score(y_true, y_prob)), 4),
         "confusion_matrix": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
+        "false_positive_rate": round(float(fp / (fp + tn)) if (fp + tn) else 0.0, 4),
         "false_positive_rupee_cost": round(float(fp * fp_cost_per), 2),
         "sample_count": int(len(y_true)),
         "fraud_prevalence": round(float(y_true.mean()), 4),
@@ -172,6 +173,27 @@ def simulate_production_decision(df, y_prob):
             "hold": int((decisions == "HOLD").sum()),
             "reject": int((decisions == "REJECT").sum()),
         },
+        "decisions": decisions.tolist(),
+    }
+
+
+def combined_policy_metrics(df, decisions):
+    """Evaluate the deployed three-state policy across the full holdout.
+
+    Operationally, HOLD and REJECT both stop immediate settlement, so both are
+    treated as a fraud flag for this comparison; APPROVE is unflagged.
+    """
+    y_true = df["label"].to_numpy()
+    flagged = (np.asarray(decisions) != "APPROVE").astype(int)
+    tn, fp, fn, tp = confusion_matrix(y_true, flagged).ravel()
+    return {
+        "definition": "HOLD or REJECT is a fraud flag; APPROVE is unflagged",
+        "precision": round(float(precision_score(y_true, flagged, zero_division=0)), 4),
+        "recall": round(float(recall_score(y_true, flagged, zero_division=0)), 4),
+        "f1": round(float(f1_score(y_true, flagged, zero_division=0)), 4),
+        "false_positive_rate": round(float(fp / (fp + tn)) if (fp + tn) else 0.0, 4),
+        "confusion_matrix": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
+        "sample_count": int(len(y_true)),
     }
 
 
@@ -246,6 +268,7 @@ def main():
         "f1": round(float(f1_score(y, rule_preds, zero_division=0)), 4),
         "pr_auc": round(float(average_precision_score(y, rule_scores)), 4),
         "confusion_matrix": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
+        "false_positive_rate": round(float(fp / (fp + tn)) if (fp + tn) else 0.0, 4),
         "false_positive_rupee_cost": round(float(fp * 500.0), 2),
         "sample_count": int(len(y)),
     }
@@ -257,6 +280,7 @@ def main():
     full_prob = np.full(len(df), np.nan)
     full_prob[df["ml_eligible"].to_numpy() == 1] = y_prob
     prod_decision = simulate_production_decision(df, full_prob)
+    combined_metrics = combined_policy_metrics(df, prod_decision["decisions"])
     hard_rows = df[df["ml_eligible"] == 0]
     mandatory_gate = {
         "records": int(len(hard_rows)),
@@ -274,6 +298,7 @@ def main():
         "ai_model": ai_metrics,
         "rules_baseline": rule_metrics,
         "production_decision": prod_decision,
+        "combined_rules_plus_ml": combined_metrics,
         "improvement": {
             "pr_auc_delta": round(ai_metrics["pr_auc"] - rule_metrics["pr_auc"], 4),
             "fp_cost_reduction_inr": round(rule_metrics["false_positive_rupee_cost"] - ai_metrics["false_positive_rupee_cost"], 2),
@@ -317,6 +342,7 @@ def main():
         f"| Recall | {ai_metrics['recall']} | {rule_metrics['recall']} | -- |",
         f"| F1 | {ai_metrics['f1']} | {rule_metrics['f1']} | -- |",
         f"| FP Cost (INR) | {ai_metrics['false_positive_rupee_cost']} | {rule_metrics['false_positive_rupee_cost']} | {evidence['improvement']['fp_cost_reduction_inr']} |",
+        f"| False-positive rate | {ai_metrics['false_positive_rate']} | {rule_metrics['false_positive_rate']} | -- |",
         "",
         "## Mandatory security gate",
         "",
@@ -353,6 +379,17 @@ def main():
         f"Decision distribution: {prod_decision['decision_counts']['approve']} APPROVE / "
         f"{prod_decision['decision_counts']['hold']} HOLD / "
         f"{prod_decision['decision_counts']['reject']} REJECT",
+        "",
+        "## Combined Rules + ML Policy",
+        "",
+        "A HOLD or REJECT is counted as a fraud flag; APPROVE is unflagged.",
+        "",
+        "| Metric | Combined policy |",
+        "|---|---|",
+        f"| Precision | {combined_metrics['precision']} |",
+        f"| Recall | {combined_metrics['recall']} |",
+        f"| F1 | {combined_metrics['f1']} |",
+        f"| False-positive rate | {combined_metrics['false_positive_rate']} |",
         "",
         "## Latency",
         "",

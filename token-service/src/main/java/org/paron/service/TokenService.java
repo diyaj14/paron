@@ -137,6 +137,16 @@ public class TokenService {
         // ── Layer 2: Check DB record status
         TokenRecord record = tokenRepository.findByTokenValue(request.getToken())
                 .orElseThrow(() -> new TokenNotFoundException("JWT not found in database"));
+        // Database state, not a client-provided claim, is authoritative. A
+        // valid signature alone must not allow a token for a different record.
+        if (!record.getId().toString().equals(claims.get("tokenId", String.class))
+                || !record.getUserId().equals(claims.getSubject())
+                || !record.getReservationId().equals(claims.get("reservationId", String.class))
+                || !record.getDeviceId().equals(claims.get("deviceId", String.class))
+                || record.getMaxAmount().compareTo(new BigDecimal(claims.get("maxAmount", String.class))) != 0) {
+            log.warn("JWT claims do not match authoritative token record. tokenId={}", record.getId());
+            return ValidateTokenResponse.builder().valid(false).reason("TOKEN_CLAIMS_MISMATCH").build();
+        }
         // Token must still be ACTIVE (not already USED, EXPIRED, or INVALIDATED)
         if (record.getStatus() != TokenStatus.ACTIVE) {
             log.warn("Token is not Active. status{}, tokenId={}", record.getStatus(), record.getId());

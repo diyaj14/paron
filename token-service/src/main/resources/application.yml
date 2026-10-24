@@ -39,8 +39,10 @@ spring:
 # ─── JWT configuration ────────────────────────────────────────────────────
 # jwt.secret MUST be at least 64 characters (512 bits) for HS512 signing.
 # Generate one with:  openssl rand -base64 64
+offline-token:
+  signing-secret: ${OFFLINE_TOKEN_SIGNING_SECRET}
+  issuer: ${OFFLINE_TOKEN_ISSUER:paron-offline-token}
 jwt:
-  secret: ${JWT_SECRET}
   # How long (hours) an offline spending token stays valid before auto-expiring
   offline-token-expiry-hours: 6
   # How long (hours) a service-to-service auth token stays valid

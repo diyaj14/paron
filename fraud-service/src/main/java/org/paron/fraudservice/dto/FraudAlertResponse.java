@@ -15,8 +15,11 @@ public class FraudAlertResponse {
     private RiskLevel riskLevel;
     private List<String> triggeredRules;
     private String decision;
+    private String decisionReason;
     private Double confidence;
     private String modelVersion;
+    private Double shadowScore;
+    private String shadowModelVersion;
     private String policyVersion;
     private List<String> reasonCodes;
 }

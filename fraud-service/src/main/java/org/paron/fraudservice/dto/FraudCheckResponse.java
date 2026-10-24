@@ -13,6 +13,8 @@ public class FraudCheckResponse {
     private String reason;
     private Double confidence;
     private String modelVersion;
+    private Double shadowScore;
+    private String shadowModelVersion;
     private String policyVersion;
     private List<String> reasonCodes;
 }

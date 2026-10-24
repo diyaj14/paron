@@ -98,8 +98,13 @@ public class FraudScoringService {
                 .riskLevel(riskLevel)
                 .triggeredRules(triggeredRules)
                 .decision(decisionResult.getDecision().name())
+                .decisionReason(decisionResult.getReason())
                 .confidence(modelOutput != null ? modelOutput.getConfidence() : null)
                 .modelVersion(modelOutput != null ? modelOutput.getModelVersion() : null)
+                .shadowScore(modelOutput != null && modelOutput.getShadowAssessment() != null
+                        ? modelOutput.getShadowAssessment().getScore() : null)
+                .shadowModelVersion(modelOutput != null && modelOutput.getShadowAssessment() != null
+                        ? modelOutput.getShadowAssessment().getModelVersion() : null)
                 .policyVersion("thresholds-v1")
                 .reasonCodes(reasonCodes)
                 .build();

@@ -43,10 +43,13 @@ public class JwtUtil {
     // Secret key loaded from environment variable JWT_SECRET
     // Must be at least 64 characters for HS512
     private final SecretKey secretKey;
+    private final String issuer;
 
-    public JwtUtil(@Value("${jwt.secret}") String secret) {
+    public JwtUtil(@Value("${offline-token.signing-secret}") String secret,
+                   @Value("${offline-token.issuer}") String issuer) {
         // Convert the secret string into a cryptographic key object
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.issuer = issuer;
     }
 
     /**
@@ -74,6 +77,7 @@ public class JwtUtil {
         Date expiryDate = Date.from(expiresAt.atZone(ZoneId.systemDefault()).toInstant());
 
         return Jwts.builder()
+                .issuer(issuer)
                 .subject(userId)                            // who owns this token
                 .claim("tokenId",       tokenId.toString())
                 .claim("reservationId", reservationId)
@@ -99,11 +103,16 @@ public class JwtUtil {
      * @throws JwtException if the token is invalid, expired, or tampered with
      */
     public Claims validateAndExtractClaims(String token) {
-        return Jwts.parser()
+        Jws<Claims> signed = Jwts.parser()
                 .verifyWith(secretKey)      // use our secret key to verify signature
+                .requireIssuer(issuer)
                 .build()
                 .parseSignedClaims(token)   // throws if signature invalid or expired
-                .getPayload();              // returns the claims (userId, amount, etc.)
+                ;
+        if (!Jwts.SIG.HS512.getId().equals(signed.getHeader().getAlgorithm())) {
+            throw new UnsupportedJwtException("Offline token must use HS512");
+        }
+        return signed.getPayload();          // returns the claims (userId, amount, etc.)
     }
 
     /**

@@ -186,3 +186,9 @@ An LLM is optional and confined to summarising already-approved structured evide
 - One graceful failure demo: risk-model timeout results in a held case and no settlement.
 - One audit trace from input through decision to settlement or review.
 - Explicit limitations: synthetic labels are not production performance; human review and policy ownership remain necessary.
+
+## 10. Offline double-spend limits and conflict policy
+
+An offline receipt cannot be globally prevented from being presented to two merchants before either device reconnects. The recipient may hand over goods before the server sees either receipt. After reconnection, Paron verifies the device receipt, token signature, bound device, and the server-side allowance; it can flag suspicious reuse with the fraud service, but this is detection and adjudication, not retroactive prevention.
+
+For receipts that collectively exceed one token's authorized allowance, the implemented policy is **first successfully committed settlement wins**. The ledger serializes settlement under the account lock and rejects every later receipt that would exceed the remaining reservation. The rejected receipt is retained with its evidence for review; no frontend-provided user, amount, or settlement state is treated as authoritative. Transaction IDs are unique in the sync database and Redis claims avoid duplicate processing, but a durable ledger idempotency key is still required before treating a retry after an ambiguous ledger timeout as fully safe.
