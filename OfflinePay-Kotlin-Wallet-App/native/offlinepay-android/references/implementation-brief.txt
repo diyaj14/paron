@@ -1,0 +1,161 @@
+# OfflinePay AI — Kotlin Android App Implementation
+
+Act as a **senior Android developer, Kotlin specialist, and fintech UI/UX implementation engineer**. Your task is to implement my existing app design in Kotlin for Android, using the provided reference files.
+
+## 1. Reference Files and Priority
+
+I have provided two references:
+
+- **Reference 1 — UI Design (PDF):** This is the definitive source for the app’s visual design. Follow the screens, colors, typography, illustrations, icons, component shapes, spacing, card styles, backgrounds, and overall visual appearance exactly as shown.
+- **Reference 2 — UI Flow Diagram (image):** This defines the screen sequence, navigation paths, authentication process, payment workflow, and wallet interactions.
+
+Use the PDF for **how the app looks** and the flow diagram for **how the app works and navigates**.
+
+Do not substitute your own design decisions for the designs already provided.
+
+## 2. Non-Negotiable Design Requirements
+
+**Do not redesign, modernize, simplify, or reinterpret my UI. Implement the provided design as faithfully as possible.**
+
+Preserve the following:
+
+- The existing color palette: Glacier Blue (`#5FC DFF`), Wealth Beige (`#FFFB E7`), Trust Indigo (`#081A31`), Yield Blue (`#0E86EE`), and Carbon Credit (`#17181D`). Use the exact intended hexadecimal values from the design reference where available.
+- The existing light and dark screen variants, including the dark navy authentication screens and light cream payment screens.
+- Typography, font weights, text sizes, and alignment.
+- Card dimensions, corner radii, borders, shadows, dividers, and spacing.
+- Icons, illustrations, navigation bars, buttons, input fields, progress bars, and status indicators.
+- All existing screen titles, labels, descriptions, payment options, and button text.
+- The placement and hierarchy of all UI elements.
+
+Do not introduce green, red, or yellow UI colors. Use the established blue, navy, beige, and neutral palette for payment states and alerts.
+
+Do not add new features, remove existing options, rename actions, or rearrange the intended workflow. If a detail cannot be determined from the references, identify the uncertainty instead of inventing a new design.
+
+## 3. Technology and Architecture
+
+Implement the application as a native Android app using **Kotlin**.
+
+- Use Jetpack Compose if the existing project supports it; otherwise, inspect the current project and retain its established UI framework.
+- Follow a maintainable architecture, preferably MVVM with a clear separation between UI, state management, business logic, and data access.
+- Use reusable composable functions or UI components for repeated elements such as buttons, merchant rows, balance cards, headers, and transaction items.
+- Use a centralized theme for colors, typography, shapes, and spacing.
+- Handle Android system bars, screen insets, keyboard visibility, scrolling, and different device sizes properly.
+- Use state-driven UI instead of hardcoded visual states.
+- Keep the code modular, readable, and easy to extend.
+
+Do not replace the design with generic Material components whose default styling differs from the reference.
+
+## 4. Implement the Screens in the Provided UI Flow
+
+Follow the exact sequence and branching logic in the flow diagram.
+
+### Authentication
+1. Onboarding screen.
+2. Sign up / Log in.
+3. Phone number entry.
+4. OTP entry and verification.
+5. Navigate to the home screen after successful authentication.
+
+The phone number and OTP screens must retain the dark navy design shown in the reference PDF.
+
+### Home Screen
+Implement the existing home screen with:
+
+- User greeting and profile access.
+- Current balance.
+- Separate online and offline balances.
+- Pay with UPI.
+- Wallet.
+- Transaction History.
+- Offline-payment entry point.
+
+Keep the existing options and their intended navigation destinations.
+
+### UPI Payment Flow
+6. Pay with UPI — retain both existing options:
+   - Scan QR Code.
+   - Enter Mobile Number.
+
+7. QR Scanner — provide the QR scanning interface and the existing mobile-number entry alternative where specified.
+
+8. Payment Details — display the merchant information, payment amount, optional note, and the existing payment-method choices. Do not change the available options.
+
+9. Offline Payment — display the offline balance, remaining allowance, payment amount, and the existing Pay Using Offline Token action.
+
+10. Payment Successful — show the confirmation and transaction details using the provided design.
+
+### Wallet and Transaction History
+Implement the wallet and transaction-history screens and their interactions as defined by the reference flow, including:
+
+- Current balance.
+- Online balance and offline balance.
+- Reserve Offline.
+- Transfer from bank.
+- Transaction history.
+
+Do not invent additional wallet actions or alter the existing ones.
+
+## 5. Payment Workflow and State Handling
+
+The app should follow the supplied flow:
+
+- When an internet connection is available, use the existing UPI payment path.
+- When an internet connection is unavailable, present the offline-token payment option.
+- Display the relevant payment amount and merchant details before confirmation.
+- Represent offline transactions as locally recorded and awaiting verification when appropriate.
+- Reflect transaction status and balance changes consistently across the relevant screens.
+- Handle loading, errors, retries, cancellation, and navigation without breaking the intended UI.
+
+Keep the visual treatment of each state consistent with the provided design system.
+
+**Important:** Do not simulate a successful real-world payment merely by displaying a success screen. Keep payment processing separate from UI presentation and use the appropriate payment-provider integration or clearly identified development-mode behavior. Offline payment authorization, token validation, and later reconciliation must follow a secure backend protocol.
+
+## 6. Implementation Process
+
+Before modifying the code:
+
+1. Inspect the existing Android project structure, Gradle configuration, Kotlin files, assets, navigation setup, and dependencies.
+2. Review both reference files and map every screen to the corresponding UI and navigation destination.
+3. Identify existing components and reuse them wherever possible.
+4. Create a screen-by-screen implementation plan.
+5. Implement the UI without changing the visual design or available options.
+6. Connect each button and interaction to the correct destination or action.
+7. Test the complete navigation flow and verify that the UI remains aligned on different screen sizes.
+
+Do not replace the existing project with an unrelated starter application. Preserve working functionality and modify only what is necessary.
+
+## 7. Visual Quality Assurance
+
+Compare the implemented app against the PDF reference screen by screen.
+
+Verify:
+
+- Colors and backgrounds match the reference.
+- Elements are correctly aligned and consistently spaced.
+- Text wraps appropriately without clipping or unintended truncation.
+- Buttons, cards, and input fields have the correct dimensions and shapes.
+- Icons and illustrations use the intended assets.
+- Scrolling and system insets do not hide important content.
+- The light and dark themes are applied to the correct screens.
+- Every navigation action follows the supplied flow diagram.
+- No existing options or screen content have been unintentionally changed.
+
+If a visual discrepancy exists, correct the implementation rather than changing the reference design to match the code.
+
+## 8. Expected Deliverables
+
+Provide:
+
+1. The complete Kotlin implementation integrated into the existing project.
+2. All required Compose components or XML layouts, depending on the project’s existing framework.
+3. Navigation and UI-state management.
+4. Required theme files, drawable assets, and resource definitions.
+5. Any necessary data models and service interfaces.
+6. A clear summary of the files created or modified.
+7. Build and test results, along with any remaining limitations.
+
+Do not return only screenshots, mockups, pseudocode, or isolated example components. Implement the actual app in the project.
+
+## Final Instruction
+
+The PDF defines the appearance; the flow diagram defines the behavior. **Reproduce my existing design faithfully in Kotlin, preserve every existing option, and implement the complete navigation flow. Do not redesign the UI or introduce unrequested features.**
