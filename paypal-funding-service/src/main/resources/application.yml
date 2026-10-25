@@ -10,12 +10,12 @@ spring:
       - "optional:file:./.env[.properties]"
       - "optional:file:../.env[.properties]"
   datasource:
-    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}?sslmode=require&connect_timeout=90&tcpKeepAlive=true
+    url: jdbc:postgresql://${SUPABASE_HOST}:6543/${SUPABASE_DB}?sslmode=require&connect_timeout=90&tcpKeepAlive=true&prepareThreshold=0
     username: ${SUPABASE_USER}
     password: ${SUPABASE_PASSWORD}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
 paypal:
   base-url: ${PAYPAL_BASE_URL:https://api-m.sandbox.paypal.com}
   # CLIENT_ID/CLIENT_SECRET are accepted for a local PayPal sandbox .env;
@@ -30,3 +30,9 @@ cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
 management:
   endpoints.web.exposure.include: health,info
+
+  datasource:
+    hikari:
+      maximum-pool-size: 1
+      minimum-idle: 0
+      connection-timeout: 30000

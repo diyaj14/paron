@@ -65,7 +65,7 @@ public class FraudController {
         String decision = alertResponse.getDecision();
 
         List<String> triggered = alertResponse.getTriggeredRules();
-        String reason = triggered.isEmpty() ? "NONE" : triggered.get(0);
+        String reason = triggered.isEmpty() ? alertResponse.getDecisionReason() : triggered.get(0);
 
         FraudCheckResponse response = FraudCheckResponse.builder()
                 .score(alertResponse.getScore())
@@ -73,6 +73,8 @@ public class FraudController {
                 .reason(reason)
                 .confidence(alertResponse.getConfidence())
                 .modelVersion(alertResponse.getModelVersion())
+                .shadowScore(alertResponse.getShadowScore())
+                .shadowModelVersion(alertResponse.getShadowModelVersion())
                 .policyVersion(alertResponse.getPolicyVersion())
                 .reasonCodes(alertResponse.getReasonCodes())
                 .build();

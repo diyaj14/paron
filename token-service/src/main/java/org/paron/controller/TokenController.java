@@ -24,7 +24,9 @@ public class TokenController {
 
     /*Generate token for user*/
     @PostMapping("/gettoken")
-    public ResponseEntity<TokenResponse> giveToken(@Valid @RequestBody TokenRequest tokenRequest){
+    public ResponseEntity<TokenResponse> giveToken(@RequestHeader("X-User-Id") String authenticatedUserId,
+                                                    @Valid @RequestBody TokenRequest tokenRequest){
+        tokenRequest.setUserId(authenticatedUserId);
         log.info("Token generation request recieved for user with id {}",tokenRequest.getUserId());
         TokenResponse tokenResponse=tokenService.generateToken(tokenRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(tokenResponse);

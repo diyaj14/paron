@@ -25,6 +25,7 @@ public class ModelClient {
             @Value("${model.service.url:http://localhost:8600}") String modelServiceUrl) {
         this.restTemplate = restTemplate;
         this.modelServiceUrl = modelServiceUrl;
+        log.info("fraud model client configured for {}", modelServiceUrl);
     }
 
     public ModelOutput score(Map<String, Double> features, String correlationId) {
@@ -77,7 +78,7 @@ public class ModelClient {
             return null;
 
         } catch (Exception e) {
-            log.error("Model service call failed: {}", e.getMessage());
+            log.error("Model service call failed for {}", modelServiceUrl, e);
             return null;
         }
     }

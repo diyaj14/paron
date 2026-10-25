@@ -277,10 +277,10 @@ def run_live(endpoint):
 
 def main():
     parser = argparse.ArgumentParser(description="Paron Guard offline fraud drill")
-    parser.add_argument("--model", type=str, default="./artifacts/model.joblib")
+    parser.add_argument("--model", type=str, default="./artifacts/scenario-v2/model.joblib")
     parser.add_argument("--endpoint", type=str, default=None,
                         help="Live fraud-service base URL; if set, drills over HTTP")
-    parser.add_argument("--out-dir", type=str, default="./artifacts")
+    parser.add_argument("--out-dir", type=str, default="./artifacts/scenario-v2")
     args = parser.parse_args()
 
     endpoint = args.endpoint or os.getenv("FRAUD_SERVICE_URL")

@@ -4,6 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -27,9 +28,15 @@ public class AuthFilter implements GlobalFilter, Ordered {
     private static final String HEADER_USER_ROLES = "X-User-Roles";
 
     private final PublicKey publicKey;
+    private final String issuer;
+    private final String audience;
 
-    public AuthFilter(ObjectProvider<PublicKey> publicKeyProvider) {
+    public AuthFilter(ObjectProvider<PublicKey> publicKeyProvider,
+                      @Value("${gateway.jwt.issuer}") String issuer,
+                      @Value("${gateway.jwt.audience}") String audience) {
         this.publicKey = publicKeyProvider.getIfAvailable();
+        this.issuer = issuer;
+        this.audience = audience;
     }
 
     @Override
@@ -59,11 +66,16 @@ public class AuthFilter implements GlobalFilter, Ordered {
         String token = authHeader.substring(BEARER_PREFIX.length());
 
         try {
-            Claims claims = Jwts.parser()
+            var signed = Jwts.parser()
                     .verifyWith(publicKey)
+                    .requireIssuer(issuer)
+                    .requireAudience(audience)
                     .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
+                    .parseSignedClaims(token);
+            if (!Jwts.SIG.RS256.getId().equals(signed.getHeader().getAlgorithm())) {
+                return error(exchange, HttpStatus.UNAUTHORIZED, "Unexpected JWT algorithm");
+            }
+            Claims claims = signed.getPayload();
 
             String userId = claims.getSubject();
             String role = claims.get("role", String.class);
@@ -88,7 +100,8 @@ public class AuthFilter implements GlobalFilter, Ordered {
     private boolean isPublicPath(ServerWebExchange exchange) {
         String path = exchange.getRequest().getPath().value();
         return path.startsWith("/actuator/")
-                || path.endsWith("/ping");
+                || path.endsWith("/ping")
+                || path.startsWith("/api/v1/auth/");
     }
 
     private Mono<Void> error(ServerWebExchange exchange, HttpStatus status, String message) {

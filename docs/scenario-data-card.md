@@ -42,23 +42,22 @@ python ml/generate_synthetic.py --seed 99 --n 4000 --out-dir ml/data/scenario-v2
 python ml/evaluate.py --model ml/artifacts/scenario-v2/model.joblib --holdout ml/data/scenario-v2-holdout/features.csv --out-dir ml/artifacts/scenario-v2
 ```
 
-The resulting candidate is intentionally not copied to
-`risk-model-service/artifacts/approved/`. It must run in shadow mode and be
-reviewed against real settlement outcomes before it can influence policy.
+The v2 artifact is the active settlement-risk model for this hackathon demo.
+It was trained only on simulated scenarios, so its output must still be
+reviewed and recalibrated against real settlement outcomes before any
+production deployment.
 
-To run the candidate in shadow mode on Windows, keep the approved v1 model in
-place and start the model service as follows:
+To run v2 as the primary demo model on Windows:
 
 ```powershell
-$env:SHADOW_MODEL_DIR = (Resolve-Path "ml/artifacts/scenario-v2")
+$env:SHADOW_MODEL_DIR = ""
 cd risk-model-service
 uvicorn app.main:app --port 8600
 ```
 
-`POST /v1/score` then returns `shadowAssessment` alongside the primary score.
-The fraud service records both scores, versions, decision, reason codes and
-assessment timestamp in `risk_assessments`; only the primary score is passed
-to `DecisionPolicy`.
+`POST /v1/score` now returns `lr-calibrated-v2.0.0-scenario` as its primary
+model version. The fraud service records the score, model version, decision,
+reason codes and assessment timestamp in `risk_assessments`.
 
 ## Limitations
 

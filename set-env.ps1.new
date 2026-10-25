@@ -1,0 +1,40 @@
+﻿# Loads the local .env into the current PowerShell session's environment.
+#
+# Only the keys the services actually need locally are exported
+# (Supabase DB credentials, the JWT secret, and inter-service URLs).
+# Kafka/Redis keys are deliberately NOT exported: sync-service and
+# api-gateway then fall back to their application.yml local defaults
+# (localhost:9092 / localhost:6379). Fill the Upstash values in .env and
+# add the keys to $export below if you want to point at a hosted cluster.
+#
+# Usage:  . .\set-env.ps1        (dot-source so the variables persist)
+# start-services.ps1 dot-sources this file automatically.
+
+$envFile = Join-Path $PSScriptRoot ".env"
+if (-not (Test-Path -LiteralPath $envFile)) {
+    Write-Warning "set-env: $envFile not found - skipping."
+    return
+}
+
+$export = @(
+    'SUPABASE_HOST',
+    'SUPABASE_DB',
+    'SUPABASE_USER',
+    'SUPABASE_PASSWORD',
+    'JWT_SECRET',
+    'TOKEN_SERVICE_URL',
+    'LEDGER_SERVICE_URL',
+    'FRAUD_SERVICE_URL'
+)
+
+foreach ($line in Get-Content -LiteralPath $envFile) {
+    if ($line -notmatch '^\s*[A-Za-z_][A-Za-z0-9_]*\s*=') { continue }
+    $key, $value = $line -split '=', 2
+    $key = $key.Trim()
+    $value = $value.Trim().Trim('"')
+    if ($export -notcontains $key) { continue }
+    if ([string]::IsNullOrWhiteSpace($value)) { continue }
+    Set-Item -Path "Env:$key" -Value $value
+}
+
+Write-Host "set-env: exported Supabase/JWT/service-URL variables from .env."

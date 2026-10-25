@@ -1,0 +1,81 @@
+i want opiton a from here:
+Yes — that is exactly the core idea behind Paron. You're thinking of a system where a user sets aside money while online, then spends that reserved amount when the internet is unavailable.
+
+For example:
+
+1. You're online and have ₹1,000 available in your bank account.
+2. You reserve ₹500 through Paron while online.
+3. You go to a college canteen where the internet is down.
+4. You pay a merchant ₹150 using your offline allowance.
+5. When connectivity returns, Paron synchronizes the signed receipt and reconciles the transaction.
+
+The key distinction is that reserving money online and spending it offline are two different operations. You can design them to work together, but the money's actual location and the authority to spend it need to be defined carefully.
+
+## But there is one important catch
+
+There are two ways to implement your idea.
+
+[NamasPay - UPI payments for foreign travellers in India](https://images.openai.com/static-rsc-4/dQqd8JA-Dtvf_jkHach8MnBuMsEXuEgRW_UZ0exUiq_vugaUMX-gE7Iqj54GIRYwTkZirNaV4dZymBFlkMQs1sY3sXaDc2FqoIseQ0sxqXa9hxw7Z0EaORbbufgHTWed6ywkNOXHLKjCv9PMvW8yGr8mqmjb3U3JoHoQS_Ndzo8?purpose=inline)
+
+Option A — Paron as a PayPal-funded offline wallet
+
+- User funds their Paron wallet through PayPal Sandbox.
+- Paron records the credited funds and reserves part of the balance for offline spending.
+- The app authorizes local payments using signed tokens and receipts.
+- On reconnection, Paron reconciles receipts and determines which transactions are eligible for settlement.
+
+Best fit for your hackathon MVP
+
+[Transaction limit increased to Rs 500 for small value digital payments in offline mode like UPI Lite - The Economic Times](https://images.openai.com/static-rsc-4/9-dtodMX16ei2vL0ewqRhwCyjcpLq88-zDm5B7Zbo7V1RqlisxWNv2ooNRTPKgQg33Ibj4vSKdF2BxU783G6dgdEGx4fOi6tRj2UlkmdNerwesKfs3SkWIxS9ZS9dxvsFks01T0oVU8x80HShbcn2a7P8WWXlc0ApwrjSEzwTKA?purpose=inline)
+
+Option B — Offline UPI payments funded from a bank account
+
+This is closer to your original idea of reserving money directly from a bank account and using it for offline UPI payments. India's UPI Lite already follows a related model: funds are allocated from a linked bank account into an on-device wallet, with offline debits and online replenishment.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://www.npci.org.in\&sz=32)
+
+National Payments Corporation of India
+
++1
+
+
+
+However, implementing actual UPI payments requires the appropriate bank/payment-provider integration. A PayPal Sandbox connection does not automatically provide access to UPI.
+
+PayPal itself supports authorization and later capture in eligible integrations, but that is a payment hold—not a general-purpose offline wallet or a guarantee that a merchant can receive money without connectivity.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://developer.paypal.com\&sz=32)
+
+PayPal Developer
+
++1
+
+
+
+## How Paron should work
+
+1\. Online: Fund wallet
+
+PayPal Sandbox → verified backend credit
+
+2\. Reserve offline allowance
+
+₹500 reserved in the wallet ledger
+
+3\. Offline: Pay merchant
+
+₹150 payment, signed receipt, local storage
+
+4\. Reconnect: Reconcile
+
+Verify receipts, prevent duplicate debits, assess risk with AI
+
+5\. Finalize transaction
+
+Settle, reject, or hold according to deterministic rules
+
+The ₹500 example is a product configuration for your demo, not proof that Paron is authorized to process real-world offline payments under that limit.
+
+My recommendation: Keep your original concept. Paron can be a PayPal-funded offline wallet for the hackathon, while actual UPI integration can be a future payment-provider integration. The innovative part is not simply reserving money; it's allowing a bounded payment to happen without internet and reconciling potentially conflicting receipts safely when connectivity returns.
+
+One question determines the architecture: when you say “PayPal from bank,” do you mean PayPal Sandbox funding for your hackathon demo, or do you want real Indian users to move money from their bank accounts using UPI?

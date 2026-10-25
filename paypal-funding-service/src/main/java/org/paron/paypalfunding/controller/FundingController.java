@@ -14,9 +14,13 @@ public class FundingController {
 
     private final FundingService funding;
 
+    @GetMapping("/paypal/config")
+    public PaypalPublicConfig config() { return funding.publicConfig(); }
+
     @PostMapping("/paypal/orders") 
-    public ResponseEntity<FundingResponse> create(@Valid @RequestBody CreateFundingRequest request) { 
-        return ResponseEntity.status(HttpStatus.CREATED).body(funding.create(request)); 
+    public ResponseEntity<FundingResponse> create(@RequestHeader("X-User-Id") String authenticatedUserId,
+                                                   @Valid @RequestBody CreateFundingRequest request) { 
+        return ResponseEntity.status(HttpStatus.CREATED).body(funding.create(authenticatedUserId, request)); 
     }
 
     @PostMapping("/paypal/orders/{orderId}/capture") 

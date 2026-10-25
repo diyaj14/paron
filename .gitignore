@@ -46,3 +46,8 @@ __pycache__/
 .gradle/
 **/.gradle/
 local.properties
+
+# RSA keys (never commit)
+session-*.pem
+*.pem
+

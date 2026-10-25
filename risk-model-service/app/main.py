@@ -1,8 +1,7 @@
 """Paron Guard Risk Model Service — FastAPI application.
 
 Serves POST /v1/score and GET /healthz.
-Loads the primary model from artifacts/approved/<version>/ and can optionally
-score a candidate in shadow mode.
+Loads the promoted v2 scenario model as the primary settlement-risk model.
 """
 
 import os
@@ -16,13 +15,11 @@ from joblib import load
 import numpy as np
 from pydantic import BaseModel, Field
 
-MODEL_DIR = Path(os.getenv("MODEL_DIR", "./artifacts/approved"))
-# Optional candidate directory. When supplied, the candidate is scored for
-# observation only; the primary approved model remains the response used by
-# the settlement policy.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MODEL_DIR = Path(os.getenv("MODEL_DIR", str(REPO_ROOT / "ml" / "artifacts" / "scenario-v2")))
+# Optional secondary observation model for a future candidate.
 SHADOW_MODEL_DIR = os.getenv("SHADOW_MODEL_DIR", "").strip()
 SUPPORTED_SCHEMA_VERSIONS = ["v1"]
-MODEL_VERSION = "lr-calibrated-v1.0.0"
 THRESHOLD_POLICY_VERSION = "thresholds-v1"
 
 FEATURE_NAMES = [
@@ -49,6 +46,7 @@ REASON_CODE_MAP = {
     "user_tx_value_1h": ("VALUE_SPIKE_1H", "Unusually high total value within the last hour"),
     "device_tx_value_24h": ("VALUE_SPIKE_1H", "Unusually high total value within the last hour"),
     "token_reuse_count": ("TOKEN_REUSE_DETECTED", "This token shows signs of being used before"),
+    "token_tx_count_24h": ("TOKEN_ACTIVITY_ELEVATED", "This token has unusually high recent activity"),
     "duplicate_payload_hash_count": ("DUPLICATE_PAYLOAD", "An identical submission already exists"),
     "time_to_expiry_seconds": ("TOKEN_NEAR_EXPIRY", "Token was close to expiry when submitted"),
     "offline_duration_seconds": ("OFFLINE_DURATION_LONG", "Payment stayed offline unusually long before syncing"),
@@ -59,17 +57,28 @@ REASON_CODE_MAP = {
 }
 
 model = None
+model_version = None
 shadow_model = None
 shadow_model_version = None
 
 
 def load_model():
-    global model, shadow_model, shadow_model_version
-    for version_dir in sorted(MODEL_DIR.iterdir()):
-        if version_dir.is_dir():
-            model_path = version_dir / "model.joblib"
-            if model_path.exists():
-                model = load(model_path)
+    global model, model_version, shadow_model, shadow_model_version
+    model_path = MODEL_DIR / "model.joblib"
+    manifest_path = MODEL_DIR / "manifest.json"
+    if model_path.exists() and manifest_path.exists():
+        import json
+        model = load(model_path)
+        model_version = json.loads(manifest_path.read_text(encoding="utf-8"))["model_version"]
+    elif MODEL_DIR.exists():
+        # Backwards-compatible support for an earlier versioned-model folder.
+        for version_dir in sorted(MODEL_DIR.iterdir()):
+            candidate_model = version_dir / "model.joblib"
+            candidate_manifest = version_dir / "manifest.json"
+            if version_dir.is_dir() and candidate_model.exists() and candidate_manifest.exists():
+                import json
+                model = load(candidate_model)
+                model_version = json.loads(candidate_manifest.read_text(encoding="utf-8"))["model_version"]
                 break
     if model is None:
         return False
@@ -214,7 +223,7 @@ async def score(request: ScoreRequest):
         score=score_val,
         confidence=confidence,
         fallback=False,
-        modelVersion=MODEL_VERSION,
+        modelVersion=model_version,
         thresholdPolicyVersion=THRESHOLD_POLICY_VERSION,
         featureSchemaVersion=request.featureSchemaVersion,
         topContributions=contributions,
@@ -226,7 +235,7 @@ async def score(request: ScoreRequest):
 async def healthz():
     return {
         "status": "ok",
-        "modelVersion": MODEL_VERSION,
+        "modelVersion": model_version,
         "featureSchemaVersions": SUPPORTED_SCHEMA_VERSIONS,
         "shadowModelVersion": shadow_model_version,
     }

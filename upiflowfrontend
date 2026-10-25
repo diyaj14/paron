@@ -1,0 +1,58 @@
+The core user interface (UI) flow of a standard Unified Payments Interface (UPI) payment app—such as Google Pay, PhonePe, or Paytm—is optimized for speed, security, and minimal friction.
+The architecture is divided into three distinct phases: Onboarding, The Payment Journey, and Post-Transaction Tracking.
+
+1. Onboarding & Registration Flow
+
+This is a one-time sequence required to bind the user's device and bank account to the UPI network.
+[App Launch] ➔ [Mobile Number Input] ➔ [SIM Verification (SMS)] 
+                     ➔ [Set App Lock] ➔ [Bank Selection] ➔ [Fetch & Link Account]
+• Device Binding: The app automatically sends a background SMS from the user's phone to verify that the mobile number matches the device hardware.
+• Bank Account Fetching: The app queries the National Payments Corporation of India (NPCI) network using the verified mobile number to securely retrieve all linked bank accounts.
+• UPI PIN Creation: If a UPI PIN isn't already set for the bank account, the user inputs their debit card details (last 6 digits and expiry) and verifies it via a bank OTP to create a 4 or 6-digit secure UPI PIN.
+
+2. The Core Payment Flows
+
+UPI apps generally split transactions into three main entry points based on how the user interacts with the recipient.
+
+Flow A: Scan & Pay (QR Code)
+
+This is the most common retail merchant flow.
+1. Entry: Tap the "Scan QR" icon on the home screen.
+2. Camera Interface: The system requests camera permissions and opens a viewfinder.
+3. Parsing: The app decodes the QR code string to extract the merchant's UPI ID (VPA), name, and transaction amount (if it's a dynamic QR).
+4. Amount Screen: The user enters the payment amount (if not preset) and an optional note.
+5. Account Selection: A bottom sheet displays the default bank account with an option to switch accounts.
+6. Security Overlay: The native, secure NPCI overlay appears. The user types their UPI PIN.
+
+Flow B: Pay to Contact / Phone Number
+
+Used for Peer-to-Peer (P2P) transfers.
+1. Entry: Tap "Pay Contacts" or "To Mobile Number".
+2. Contact List: The app fetches the phone book or provides a search bar.
+3. Recipient Validation: Once a number is entered, the app checks the UPI database to verify if the contact is registered and displays the legal name linked to the account to prevent misdirected payments.
+4. Chat/Payment Screen: Opens a chat-like interface displaying previous transaction history with a prominent "Pay" button.
+5. Execution: Amount Entry ➔ Bank Selection ➔ UPI PIN Screen.
+
+Flow C: Pay to UPI ID / VPA
+
+Used when transferring money without a phone number or QR code.
+1. Entry: Tap "Pay to UPI ID".
+2. Input: User types the Virtual Payment Address (e.g., username@bank).
+3. Verification: The user clicks "Verify". The system queries the UPI switch and surfaces the beneficiary's registered account name.
+4. Execution: Amount Entry ➔ Bank Selection ➔ UPI PIN Screen.
+
+3. Post-Transaction & Status Flow
+
+Once the UPI PIN is submitted, the app transitions into an asynchronous polling state while communicating with the banking servers.
+[Processing Screen (Loader)] ➔ [Status Screen (Success / Fail / Pending)] 
+                                      ➔ [Receipt Generation & Notification]
+• Processing Screen: A non-interruptible loading screen appears. Users are explicitly warned not to press back or close the app.
+• The Success Screen:
+	• Features a distinct green checkmark animation.
+	• Plays an audible confirmation sound (highly critical for merchant reassurance).
+	• Displays the Transaction ID, Bank Ref Number, Amount, and Recipient Name.
+• Exception Handling (Failures): If the payment fails (e.g., wrong PIN, bank server downtime, insufficient funds), the UI surfaces a red warning card accompanied by a contextual call-to-action like "Try Again" or "Switch Bank Account".
+If you are designing or building a fintech application, let me know:
+• Are you mapping the user app or the merchant app flow?
+• Do you need details on handling edge cases like network timeouts and pending states?
+• Should we look into integrating UPI Lite (on-device wallet) or RuPay Credit Card flows?

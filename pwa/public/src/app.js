@@ -5,6 +5,7 @@ const RECEIPT_CHARACTERISTIC = "dabb1d77-39bd-4b1e-a6f2-1abc02d4de03";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const $ = (id) => document.getElementById(id);
+const rawFetch = window.fetch.bind(window);
 function fallbackUUID() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); }); }
 function uuid() { try { return crypto.randomUUID(); } catch { return fallbackUUID(); } }
 function deviceId() { let id = localStorage.getItem("paron-device-id"); if (!id) { id = uuid(); localStorage.setItem("paron-device-id", id); } return id; }
@@ -22,6 +23,33 @@ const database = (() => {
 function message(text) { $("notice").textContent = text; }
 function apiBase() { return $("api-base").value.trim().replace(/\/$/, ""); }
 function fundingApiBase() { return $("funding-api-base").value.trim().replace(/\/$/, "") || apiBase(); }
+function sessionToken() { return $("session-token").value.trim(); }
+function authHeaders(extra = {}) { return sessionToken() ? { ...extra, Authorization: `Bearer ${sessionToken()}` } : extra; }
+async function apiFetch(path, init = {}, base = apiBase()) {
+  if (!base) throw new Error("Enter the API gateway URL first.");
+  const response = await rawFetch(`${base}${path}`, { ...init, headers: authHeaders(init.headers || {}) });
+  if (response.status === 401) throw new Error("Your session is missing or expired. Sign in again.");
+  if (response.status === 403) throw new Error("Your session is not authorized for this account.");
+  return response;
+}
+// Existing wallet calls share this authenticated transport; non-Paron URLs
+// (PayPal's SDK, Bluetooth, etc.) are intentionally left untouched.
+window.fetch = (input, init = {}) => {
+  const url = typeof input === "string" ? input : input.url;
+  const base = apiBase();
+  return rawFetch(input, base && url.startsWith(base) ? { ...init, headers: authHeaders(init.headers || {}) } : init);
+};
+async function startDemoSession() {
+  const username = $("demo-username").value.trim(), password = $("demo-password").value;
+  if (!apiBase() || !username || !password) throw new Error("Enter gateway URL, demo username, and password.");
+  const response = await fetch(`${apiBase()}/api/v1/auth/demo/session`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ username, password }) });
+  if (!response.ok) throw new Error(`Demo sign-in failed (${response.status}). Check the configured demo credentials.`);
+  const session = await response.json();
+  $("session-token").value = session.accessToken;
+  $("user-id").value = session.userId;
+  message(`Signed in as ${session.userId}. Session expires in ${Math.floor(session.expiresIn / 60)} minutes.`);
+  await render();
+}
 function rupees(amount) { return `₹${Number(amount).toFixed(2)}`; }
 function statusClass(state) { return state.includes("FAILED") || state.includes("REJECTED") ? "failed" : state.includes("PENDING") || state.includes("QUEUED") || state.includes("ACCEPTED") || state.includes("HELD") ? "pending" : "active"; }
 async function sha256(text) { const result = await crypto.subtle.digest("SHA-256", encoder.encode(text)); return btoa(String.fromCharCode(...new Uint8Array(result))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
@@ -70,7 +98,7 @@ function escapeHtml(value) { return String(value).replace(/[&<>"]/g, (char) => (
 function currentSettings() { return { userId: $("user-id").value.trim(), apiBase: apiBase(), fundingApiBase: fundingApiBase() }; }
 async function saveSettings() { await database.put("settings", currentSettings(), "current"); }
 async function createDemoToken() { const amount = Number($("new-token-amount").value); if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter a valid token amount."); const token = { tokenId: uuid(), token: `demo.${uuid()}.${uuid()}`, deviceId: deviceId(), maxAmount: amount, expiresAt: new Date(Date.now() + Number($("expiry-hours").value || 6) * 3600000).toISOString(), status: "ACTIVE", demo: true }; await database.put("tokens", token); await saveSettings(); message("Demo token saved. You can now switch to airplane mode."); await render(); }
-async function requestToken() { if (!apiBase()) throw new Error("Enter the API base URL first."); const response = await fetch(`${apiBase()}/api/v1/tokens/gettoken`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ userId: $("user-id").value.trim(), deviceId: deviceId(), amount:Number($("new-token-amount").value), expiryHours:Number($("expiry-hours").value) }) }); if (!response.ok) throw new Error(`Token request failed (${response.status}).`); const token = await response.json(); token.expiresAt = new Date(token.expiresAt).toISOString(); await database.put("tokens", token); await saveSettings(); message("Token received and stored for offline use."); await render(); }
+async function requestToken() { if (!sessionToken()) throw new Error("Enter a session access token before requesting an offline token."); const response = await apiFetch("/api/v1/tokens/gettoken", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ userId: $("user-id").value.trim(), deviceId: deviceId(), amount:Number($("new-token-amount").value), expiryHours:Number($("expiry-hours").value) }) }); if (!response.ok) throw new Error(`Token request failed (${response.status}).`); const token = await response.json(); token.expiresAt = new Date(token.expiresAt).toISOString(); await database.put("tokens", token); await saveSettings(); message("Token received and stored for offline use."); await render(); }
 
 function paypalSdk(clientId, currency) {
   const existing = document.getElementById("paypal-js-sdk");
@@ -85,12 +113,13 @@ async function loadPayPalCheckout() {
   const base = fundingApiBase(), userId = $("user-id").value.trim(), amount = Number($("paypal-funding-amount").value);
   if (!base || !userId || !Number.isFinite(amount) || amount <= 0) throw new Error("Set the funding API URL, customer ID, and a valid amount.");
   $("paypal-status").textContent = "Loading secure PayPal checkout…";
-  const configResponse = await fetch(`${base}/api/funding/paypal/config`); if (!configResponse.ok) throw new Error(`Could not load PayPal configuration (${configResponse.status}).`);
+  if (!sessionToken()) throw new Error("Enter a session access token before funding the wallet.");
+  const configResponse = await apiFetch("/api/funding/paypal/config", {}, base); if (!configResponse.ok) throw new Error(`Could not load PayPal configuration (${configResponse.status}).`);
   const config = await configResponse.json(); if (!config.clientId || !config.currency) throw new Error("Funding API returned incomplete PayPal configuration."); await paypalSdk(config.clientId, config.currency);
   const container = $("paypal-button-container"); container.innerHTML = "";
   window.paypal.Buttons({
-    createOrder: async () => { const response = await fetch(`${base}/api/funding/paypal/orders`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ userId, amount }) }); if (!response.ok) throw new Error(`Order creation failed (${response.status}).`); const order = await response.json(); $("paypal-status").textContent = "Approve the Sandbox payment in the PayPal window."; return order.paypalOrderId; },
-    onApprove: async (data) => { $("paypal-status").textContent = "Capturing and crediting your demo wallet…"; const response = await fetch(`${base}/api/funding/paypal/orders/${encodeURIComponent(data.orderID)}/capture`, { method:"POST" }); if (!response.ok) throw new Error(`Capture failed (${response.status}).`); const result = await response.json(); $("paypal-status").textContent = `Sandbox payment captured — demo wallet ${result.status.toLowerCase()}.`; message("PayPal funding succeeded. You can now request an offline token."); await saveSettings(); await render(); },
+    createOrder: async () => { const response = await apiFetch("/api/funding/paypal/orders", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ amount }) }, base); if (!response.ok) throw new Error(`Order creation failed (${response.status}).`); const order = await response.json(); $("paypal-status").textContent = "Approve the Sandbox payment in the PayPal window."; return order.paypalOrderId; },
+    onApprove: async (data) => { $("paypal-status").textContent = "Capturing and crediting your demo wallet…"; const response = await apiFetch(`/api/funding/paypal/orders/${encodeURIComponent(data.orderID)}/capture`, { method:"POST" }, base); if (!response.ok) throw new Error(`Capture failed (${response.status}).`); const result = await response.json(); $("paypal-status").textContent = `Sandbox payment captured — demo wallet ${result.status.toLowerCase()}.`; message("PayPal funding succeeded. You can now request an offline token."); await saveSettings(); await render(); },
     onCancel: () => { $("paypal-status").textContent = "Payment cancelled. Your demo wallet was not credited."; },
     onError: (error) => { console.error(error); $("paypal-status").textContent = "PayPal checkout failed. No wallet credit was made."; }
   }).render("#paypal-button-container");
@@ -106,7 +135,7 @@ async function makePayment() { const token = await activeToken(); const amount =
     transaction.signature = signature;
     transaction.publicKey = JSON.stringify((await loadOrCreateKey()).publicKeyJwk);
     const canonical2 = JSON.stringify(transaction); const envelope = { protocolVersion:"paron-ble-v1", type:"PAYMENT_OFFER", transaction, payloadHash: await sha256(canonical2) }; const record = { ...transaction, payloadHash: envelope.payloadHash, state:"SENDING" }; await database.put("transactions", record); await render(); try { const receipt = await merchantConnection.send(envelope); if (receipt.type !== "PAYMENT_ACCEPTED" || receipt.deviceTransactionId !== transaction.deviceTransactionId || receipt.payloadHash !== envelope.payloadHash) throw new Error("Merchant receipt did not match this payment."); record.state = "ACCEPTED_OFFLINE"; record.receipt = receipt; await database.put("transactions", record); message("Payment accepted by merchant. It will settle after sync."); } catch (error) { record.state = "SEND_FAILED"; record.error = error.message; await database.put("transactions", record); throw error; } finally { await render(); } }
-async function syncNow() { const base = apiBase(); const { userId } = currentSettings(); if (!base || !userId) throw new Error("Set the API base URL and customer ID before syncing."); const transactions = (await database.all("transactions")).filter((tx) => ["ACCEPTED_OFFLINE", "QUEUED_FOR_SYNC"].includes(tx.state)); if (!transactions.length) { message("There are no accepted offline payments to sync."); return; } const payload = { transactions: transactions.map(({ deviceTransactionId, offlineToken, amount, merchantId, transactedAt, deviceId, signature, publicKey }) => ({ deviceTransactionId, offlineToken, amount:Number(amount), merchantId, transactedAt, deviceId, signature, publicKey })) }; const response = await fetch(`${base}/api/v1/sync/${encodeURIComponent(userId)}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }); if (!response.ok) throw new Error(`Sync failed (${response.status}). Your payments remain queued.`); const body = await response.json().catch(() => ({})); const accepted = new Set(body.acceptedDeviceTransactionIds || []); const acceptedCount = Number.isFinite(body.acceptedCount) ? body.acceptedCount : transactions.length; for (const tx of transactions) { if (accepted.size && !accepted.has(tx.deviceTransactionId)) continue; tx.state = "SUBMITTED"; await database.put("transactions", tx); } message(`${acceptedCount} payment(s) submitted for settlement.`); await render(); }
+async function syncNow() { const base = apiBase(); const { userId } = currentSettings(); if (!base || !userId) throw new Error("Set the API base URL and customer ID before syncing."); const transactions = (await database.all("transactions")).filter((tx) => ["ACCEPTED_OFFLINE", "QUEUED_FOR_SYNC"].includes(tx.state)); if (!transactions.length) { message("There are no accepted offline payments to sync."); return; } const payload = { transactions: transactions.map(({ deviceTransactionId, offlineToken, amount, merchantId, transactedAt, deviceId, signature, publicKey }) => ({ deviceTransactionId, offlineToken, amount:Number(amount), merchantId, transactedAt, deviceId, signature, publicKey })) }; const response = await apiFetch(`/api/v1/sync/${encodeURIComponent(userId)}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }); if (!response.ok) throw new Error(`Sync failed (${response.status}). Your payments remain queued.`); const body = await response.json().catch(() => ({})); const accepted = new Set(body.acceptedDeviceTransactionIds || []); const acceptedCount = Number.isFinite(body.acceptedCount) ? body.acceptedCount : transactions.length; for (const tx of transactions) { if (accepted.size && !accepted.has(tx.deviceTransactionId)) continue; tx.state = "SUBMITTED"; await database.put("transactions", tx); } message(`${acceptedCount} payment(s) submitted for settlement.`); await render(); }
 async function adjudicate() {
   const base = apiBase();
   const txnA = $("dispute-txn-a").value.trim();
@@ -145,4 +174,5 @@ async function autoSyncOnReconnect() {
 }
 async function initialise() { const settings = await database.get("settings", "current"); if (settings) { $("user-id").value = settings.userId || "demo-customer"; $("api-base").value = settings.apiBase || ""; $("funding-api-base").value = settings.fundingApiBase || ""; } $("connection-state").textContent = navigator.onLine ? "Online — token and sync available" : "Offline — payment queue available"; addEventListener("online", () => { $("connection-state").textContent = "Online — token and sync available"; }); addEventListener("offline", () => { $("connection-state").textContent = "Offline — payment queue available"; }); $("simulation").addEventListener("change", () => { merchantConnection = null; $("ble-status").textContent = $("simulation").checked ? "Simulator ready. No Bluetooth hardware needed." : "Use Connect merchant to select the merchant phone."; render(); }); $("create-demo-token").addEventListener("click", run(createDemoToken)); $("request-token").addEventListener("click", run(requestToken)); $("load-paypal").addEventListener("click", run(loadPayPalCheckout)); $("connect-merchant").addEventListener("click", run(connectMerchant)); $("pay").addEventListener("click", run(makePayment)); $("sync-now").addEventListener("click", run(syncNow)); $("resolve-dispute").addEventListener("click", run(adjudicate)); if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js"); await render(); }
 initialise().catch((error) => message(`Could not open wallet: ${error.message}`));
+addEventListener("load", () => $("demo-sign-in").addEventListener("click", run(startDemoSession)), { once: true });
 

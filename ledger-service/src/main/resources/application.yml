@@ -16,18 +16,18 @@ spring:
 
   # Same Supabase project as token-service, different tables (accounts, reservations)
   datasource:
-    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}?sslmode=require&connect_timeout=90&tcpKeepAlive=true
+    url: jdbc:postgresql://${SUPABASE_HOST}:6543/${SUPABASE_DB}?sslmode=require&connect_timeout=90&tcpKeepAlive=true&prepareThreshold=0
     username: ${SUPABASE_USER}
     password: ${SUPABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 5
-      minimum-idle: 2
+      maximum-pool-size: 1
+      minimum-idle: 0
       connection-timeout: 30000
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: false
     properties:
       hibernate:
