@@ -16,20 +16,20 @@ spring:
   # Replace the placeholders below with your actual Supabase values.
   # Go to: Supabase Dashboard → Your Project → Settings → Database → URI
   datasource:
-    url: jdbc:postgresql://${SUPABASE_HOST}:5432/${SUPABASE_DB}?sslmode=require&connect_timeout=90&tcpKeepAlive=true
+    url: jdbc:postgresql://${SUPABASE_HOST}:6543/${SUPABASE_DB}?sslmode=require&connect_timeout=90&tcpKeepAlive=true&prepareThreshold=0
     username: ${SUPABASE_USER}
     password: ${SUPABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 5          # Supabase free tier has connection limits
-      minimum-idle: 2
+      maximum-pool-size: 1          # Supabase free tier has connection limits
+      minimum-idle: 0
       connection-timeout: 30000
 
   jpa:
     hibernate:
       # "update" = JPA creates/alters tables automatically on startup.
       # Change to "validate" once your schema is stable.
-      ddl-auto: update
+      ddl-auto: none
     show-sql: false                  # Set to true while debugging
     properties:
       hibernate:

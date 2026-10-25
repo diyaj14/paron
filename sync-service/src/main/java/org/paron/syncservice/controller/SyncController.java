@@ -43,8 +43,10 @@ public class SyncController {
     @PostMapping("/{userId}")
     public ResponseEntity<SyncResponse> syncTransactions(
             @PathVariable String userId,
+            @RequestHeader("X-User-Id") String authenticatedUserId,
             @Valid @RequestBody SyncRequest request
             ){
+        if (!userId.equals(authenticatedUserId)) return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         log.info("Sync service recieved from userId={} with {} transaction", userId, request.getTransactions().size());
 
         SyncResponse response = syncService.submitTransactions(request, userId);
@@ -55,7 +57,9 @@ public class SyncController {
     that were recieved regardless of the status
      */
     @GetMapping("/{userId}")
-    public ResponseEntity<List<OfflineTransaction>> getStatus(@PathVariable String userId){
+    public ResponseEntity<List<OfflineTransaction>> getStatus(@PathVariable String userId,
+                                                               @RequestHeader("X-User-Id") String authenticatedUserId){
+              if (!userId.equals(authenticatedUserId)) return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
               List<OfflineTransaction> transactions = syncService.getStatusForUser(userId);
               return ResponseEntity.ok(transactions);
     }

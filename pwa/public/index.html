@@ -18,6 +18,10 @@
         <p class="hint">Use a real token from your API, or enter a demo token for the Bluetooth transfer demonstration.</p>
         <label>Customer ID <input id="user-id" value="demo-customer"></label>
         <label>API base URL <input id="api-base" placeholder="https://your-gateway.example"></label>
+        <label>Session access token <input id="session-token" type="password" autocomplete="off" placeholder="Bearer token issued by your auth service"></label>
+        <p class="hint">The access token remains only in this browser tab and is never stored with offline receipts.</p>
+        <div class="two"><label>Demo username <input id="demo-username" value="demo-customer"></label><label>Demo password <input id="demo-password" type="password" autocomplete="current-password"></label></div>
+        <div class="actions"><button id="demo-sign-in" class="secondary">Start demo session</button></div>
         <div class="two"><label>Token amount (₹) <input id="new-token-amount" type="number" min="1" value="500"></label><label>Expiry (hours) <input id="expiry-hours" type="number" min="1" max="24" value="6"></label></div>
         <div class="actions"><button id="request-token">Request token online</button><button id="create-demo-token" class="secondary">Create demo token</button></div>
       </section>

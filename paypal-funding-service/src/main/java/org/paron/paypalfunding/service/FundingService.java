@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.paron.paypalfunding.api.CreateFundingRequest;
+import org.paron.paypalfunding.api.PaypalPublicConfig;
 import org.paron.paypalfunding.api.FundingResponse;
 import org.paron.paypalfunding.model.FundingAttempt;
 import org.paron.paypalfunding.model.FundingStatus;
@@ -20,6 +21,9 @@ public class FundingService {
     private final PaypalClient paypal;
     private final LedgerClient ledger;
 
+    @Value("${paypal.client-id}")
+    private String clientId;
+
     @Value("${paypal.currency}") 
     private String currency;
 
@@ -27,10 +31,10 @@ public class FundingService {
     private BigDecimal maximumAmount;
 
     @Transactional
-    public FundingResponse create(CreateFundingRequest request) {
+    public FundingResponse create(String authenticatedUserId, CreateFundingRequest request) {
         BigDecimal amount = request.amount().setScale(2);
         if (amount.compareTo(maximumAmount) > 0) throw new IllegalArgumentException("Amount exceeds demo-wallet funding limit");
-        FundingAttempt attempt = attempts.save(FundingAttempt.builder().id(UUID.randomUUID()).userId(request.userId())
+        FundingAttempt attempt = attempts.save(FundingAttempt.builder().id(UUID.randomUUID()).userId(authenticatedUserId)
                 .amount(amount).currency(currency).status(FundingStatus.CREATED).build());
         JsonNode response = paypal.createOrder(amount, currency);
         String orderId = required(response, "id");
@@ -39,8 +43,10 @@ public class FundingService {
         return FundingResponse.from(attempt, approvalUrl(response));
     }
 
+    public PaypalPublicConfig publicConfig() { return new PaypalPublicConfig(clientId, currency); }
+
     /** Safe to retry: the ledger rejects a second credit for the same funding ID. */
-    @Transactional(noRollbackFor = FundingVerificationException.class)
+    @Transactional(noRollbackFor = RuntimeException.class)
     public FundingResponse capture(String paypalOrderId) {
         FundingAttempt attempt = attempts.findByPaypalOrderId(paypalOrderId)
                 .orElseThrow(() -> new EntityNotFoundException("Unknown PayPal order"));
