@@ -1,13 +1,16 @@
-package com.offlinepay.data
+﻿package com.offlinepay.data
 
 enum class PaymentMethod {
     QR,
-    MOBILE
+    MOBILE,
+    BLUETOOTH
 }
 
 enum class TransactionStatus {
     COMPLETED,
-    PENDING_VERIFICATION
+    PENDING_VERIFICATION,
+    SYNCED,
+    FAILED
 }
 
 data class WalletTransaction(
@@ -16,46 +19,36 @@ data class WalletTransaction(
     val amountRupees: Int,
     val method: String,
     val dateLabel: String,
-    val status: TransactionStatus
+    val status: TransactionStatus,
+    val offlineToken: String? = null,
+    val signature: String? = null,
+    val publicKey: String? = null,
+    val transactedAt: String? = null,
+    val deviceId: String? = null
 )
 
 data class AppUiState(
     val authenticated: Boolean = false,
-    val internetAvailable: Boolean = false,
-    val phoneNumber: String = "",
-    val onlineBalance: Int = 500,
-    val offlineBalance: Int = 500,
+    val internetAvailable: Boolean = true,
+    val phoneNumber: String = "9876543210",
+    val userName: String = "",
+    val userEmail: String = "",
+    val onlineBalance: Int = 1000,
+    val offlineBalance: Int = 0,
+    val activeOfflineToken: String? = null,
+    val activeTokenId: String? = null,
+    val tokenExpiresAt: String? = null,
     val selectedMerchant: String = "Campus Canteen",
-    val merchantId: String = "TXN-00123",
+    val merchantId: String = "merchant_canteen",
     val paymentAmount: String = "100",
     val paymentNote: String = "",
     val paymentMethod: PaymentMethod = PaymentMethod.QR,
     val lastTransaction: WalletTransaction? = null,
     val message: String? = null,
-    val transactions: List<WalletTransaction> = listOf(
-        WalletTransaction(
-            id = "DEMO-001",
-            merchant = "Campus Canteen",
-            amountRupees = 100,
-            method = "UPI",
-            dateLabel = "Apr 26, 11:20 AM",
-            status = TransactionStatus.COMPLETED
-        ),
-        WalletTransaction(
-            id = "DEMO-002",
-            merchant = "Campus Store",
-            amountRupees = 150,
-            method = "UPI",
-            dateLabel = "Apr 26, 10:42 AM",
-            status = TransactionStatus.COMPLETED
-        ),
-        WalletTransaction(
-            id = "DEMO-003",
-            merchant = "Café (Merchant C)",
-            amountRupees = 50,
-            method = "Offline Balance",
-            dateLabel = "Apr 26, 09:15 AM",
-            status = TransactionStatus.COMPLETED
-        )
-    )
+    val isSyncing: Boolean = false,
+    val isReserving: Boolean = false,
+    val bluetoothListening: Boolean = false,
+    val lastQrPayload: String? = null,
+    val serverBaseUrl: String = "http://10.0.2.2:8080",
+    val transactions: List<WalletTransaction> = emptyList()
 )

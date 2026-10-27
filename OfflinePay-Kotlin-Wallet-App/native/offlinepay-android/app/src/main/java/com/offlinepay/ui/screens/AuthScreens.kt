@@ -1,4 +1,4 @@
-package com.offlinepay.ui.screens
+﻿package com.offlinepay.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +17,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -46,14 +48,13 @@ fun OnboardingScreen(onStart: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF06172C), Color(0xFF0B2D57), Color(0xFF0C4B87))))
+            .background(Brush.verticalGradient(listOf(Color(0xFF071B33), Color(0xFF0C3362), Color(0xFF09203E))))
     ) {
         WaveArt(Modifier.fillMaxSize(), dark = true)
         Column(
-            modifier = Modifier
+            Modifier
                 .fillMaxSize()
-                .padding(horizontal = 26.dp, vertical = 42.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(horizontal = 24.dp, vertical = 34.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -167,7 +168,7 @@ fun PhoneEntryScreen(
             PrimaryAction("Continue", onContinue, enabled = phoneNumber.length == 10, trailingArrow = true)
             if (BuildConfig.DEMO_MODE) {
                 Text(
-                    "DEVELOPMENT MODE · Phone verification is not connected.",
+                    "DEVELOPMENT MODE • Phone verification is ready for demo.",
                     color = GlacierBlue,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 17.dp)
@@ -214,6 +215,83 @@ fun OtpEntryScreen(
 }
 
 @Composable
+fun ProfileSetupScreen(
+    name: String,
+    email: String,
+    onNameChange: (String) -> Unit,
+    onEmailChange: (String) -> Unit,
+    onBack: () -> Unit,
+    onComplete: () -> Unit
+) {
+    val isEmailValid = email.isNotBlank() && email.contains("@") && email.contains(".")
+    val isNameValid = name.trim().length >= 2
+
+    AuthFrame(
+        title = "Personalize Account",
+        subtitle = "Please enter your name and email ID so we can greet you and personalize receipts.",
+        onBack = onBack
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Text("FULL NAME", color = Color(0xFFB9C9DC), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            OutlinedTextField(
+                value = name,
+                onValueChange = onNameChange,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                singleLine = true,
+                leadingIcon = {
+                    androidx.compose.material3.Icon(
+                        Icons.Rounded.Person,
+                        contentDescription = null,
+                        tint = GlacierBlue
+                    )
+                },
+                placeholder = { Text("e.g. Diya Joshy", color = Color(0xFF8FA5BF)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                colors = authFieldColors()
+            )
+
+            Spacer(Modifier.height(18.dp))
+
+            Text("EMAIL ADDRESS", color = Color(0xFFB9C9DC), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            OutlinedTextField(
+                value = email,
+                onValueChange = onEmailChange,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                singleLine = true,
+                leadingIcon = {
+                    androidx.compose.material3.Icon(
+                        Icons.Rounded.Email,
+                        contentDescription = null,
+                        tint = GlacierBlue
+                    )
+                },
+                placeholder = { Text("e.g. diya@example.com", color = Color(0xFF8FA5BF)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                colors = authFieldColors()
+            )
+
+            Spacer(Modifier.height(28.dp))
+
+            PrimaryAction(
+                "Complete Setup",
+                onClick = onComplete,
+                enabled = isNameValid && isEmailValid,
+                trailingArrow = true
+            )
+
+            Text(
+                "Your name and email will be displayed on the home screen and attached to payment receipts.",
+                color = Color(0xFFB9C9DC),
+                textAlign = TextAlign.Center,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+        }
+    }
+}
+
+@Composable
 private fun AuthFrame(
     title: String,
     subtitle: String,
@@ -229,10 +307,10 @@ private fun AuthFrame(
         WaveArt(Modifier.fillMaxSize(), dark = true)
         Column(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 24.dp)) {
             BackAction(onBack, dark = true)
-            Spacer(Modifier.height(44.dp))
+            Spacer(Modifier.height(32.dp))
             Text(title, color = Color.White, fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold)
             Text(subtitle, color = Color(0xFFB9C9DC), fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.padding(top = 8.dp))
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(32.dp))
             content()
         }
     }

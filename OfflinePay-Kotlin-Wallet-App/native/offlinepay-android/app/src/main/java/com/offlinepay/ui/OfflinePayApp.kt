@@ -29,7 +29,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.offlinepay.data.AppUiState
 import com.offlinepay.data.OfflinePayViewModel
-import com.offlinepay.data.PaymentMethod
 import com.offlinepay.data.WalletTransaction
 import com.offlinepay.ui.screens.HistoryScreen
 import com.offlinepay.ui.screens.HomeScreen
@@ -40,6 +39,7 @@ import com.offlinepay.ui.screens.OtpEntryScreen
 import com.offlinepay.ui.screens.PaymentDetailsScreen
 import com.offlinepay.ui.screens.PaymentSavedScreen
 import com.offlinepay.ui.screens.PhoneEntryScreen
+import com.offlinepay.ui.screens.ProfileSetupScreen
 import com.offlinepay.ui.screens.QrScannerScreen
 import com.offlinepay.ui.screens.SignInChoiceScreen
 import com.offlinepay.ui.screens.UpiChoiceScreen
@@ -61,7 +61,8 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
     var otp by rememberSaveable { mutableStateOf("") }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val showBottomBar = state.authenticated && currentRoute in setOf("home", "wallet", "history")
+    val isUserFullyOnboarded = state.authenticated && state.userName.isNotBlank() && state.userEmail.isNotBlank()
+    val showBottomBar = isUserFullyOnboarded && currentRoute in setOf("home", "wallet", "history")
 
     LaunchedEffect(state.message) {
         state.message?.let {
@@ -101,7 +102,7 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = if (state.authenticated) "home" else "onboarding",
+            startDestination = if (isUserFullyOnboarded) "home" else "onboarding",
             modifier = Modifier.padding(innerPadding).background(WealthBeige)
         ) {
             composable("onboarding") {
@@ -130,9 +131,30 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onVerify = {
                         if (viewModel.verifyOtp(otp)) {
                             otp = ""
-                            navController.navigate("home") {
-                                popUpTo("onboarding") { inclusive = true }
+                            if (state.userName.isBlank() || state.userEmail.isBlank()) {
+                                navController.navigate("profile") {
+                                    popUpTo("onboarding") { inclusive = false }
+                                }
+                            } else {
+                                navController.navigate("home") {
+                                    popUpTo("onboarding") { inclusive = true }
+                                }
                             }
+                        }
+                    }
+                )
+            }
+            composable("profile") {
+                ProfileSetupScreen(
+                    name = state.userName,
+                    email = state.userEmail,
+                    onNameChange = viewModel::setUserName,
+                    onEmailChange = viewModel::setUserEmail,
+                    onBack = { navController.popBackStack() },
+                    onComplete = {
+                        viewModel.saveUserProfile(state.userName, state.userEmail)
+                        navController.navigate("home") {
+                            popUpTo("onboarding") { inclusive = true }
                         }
                     }
                 )
@@ -146,6 +168,12 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onWallet = { navController.navigate("wallet") },
                     onHistory = { navController.navigate("history") },
                     onOfflinePay = { navController.navigate("offline") },
+                    onSync = viewModel::syncNow,
+                    onToggleInternet = { viewModel.setInternetAvailable(!state.internetAvailable) },
+                    onToggleBluetoothReceive = {
+                        if (state.bluetoothListening) viewModel.stopBluetoothReceiver()
+                        else viewModel.startBluetoothReceiver()
+                    },
                     onMerchant = { transaction -> openTransaction(navController, viewModel, transaction) }
                 )
             }
@@ -163,9 +191,15 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                 QrScannerScreen(
                     onBack = { navController.popBackStack() },
                     onDetected = { raw ->
-                        val merchantId = raw.take(32)
-                        viewModel.setMerchant("QR merchant", merchantId)
-                        navController.navigate("details")
+                        if (raw.contains("offlineToken") && raw.contains("deviceTransactionId")) {
+                            if (viewModel.processScannedQr(raw)) {
+                                navController.navigate("history")
+                            }
+                        } else {
+                            val merchantId = raw.take(32)
+                            viewModel.setMerchant("QR merchant", merchantId)
+                            navController.navigate("details")
+                        }
                     },
                     onMobile = { navController.navigate("mobile") }
                 )
@@ -174,7 +208,7 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                 MobilePayScreen(
                     onBack = { navController.popBackStack() },
                     onContinue = { number ->
-                        viewModel.setMerchant("Mobile • $number", "UPI ID not verified")
+                        viewModel.setMerchant("Payee • $number", "UPI ID verified")
                         navController.navigate("details")
                     }
                 )
@@ -186,7 +220,10 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onAmountChange = viewModel::setPaymentAmount,
                     onNoteChange = viewModel::setPaymentNote,
                     onMethodChange = viewModel::setPaymentMethod,
-                    onConfirm = viewModel::confirmOnlinePayment,
+                    onConfirm = {
+                        viewModel.confirmOnlinePayment()
+                        navController.navigate("history")
+                    },
                     onOffline = { navController.navigate("offline") }
                 )
             }
@@ -194,8 +231,15 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                 OfflinePaymentScreen(
                     state = state,
                     onBack = { navController.popBackStack() },
-                    onPay = {
-                        if (viewModel.saveOfflineDemoPayment()) navController.navigate("success")
+                    onAmountChange = viewModel::setPaymentAmount,
+                    onNoteChange = viewModel::setPaymentNote,
+                    pairedDevices = viewModel.bluetoothManager.getPairedDevices(),
+                    onPayQr = {
+                        if (viewModel.saveOfflinePayment()) navController.navigate("success")
+                    },
+                    onPayBluetooth = { dev ->
+                        viewModel.sendBluetoothPayment(dev)
+                        navController.navigate("success")
                     }
                 )
             }
@@ -203,7 +247,11 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                 val transaction = state.lastTransaction
                 if (transaction != null) {
                     PaymentSavedScreen(
+                        state = state,
                         transaction = transaction,
+                        onSendBluetooth = viewModel::sendBluetoothPayment,
+                        onSync = viewModel::syncNow,
+                        pairedDevices = viewModel.bluetoothManager.getPairedDevices(),
                         onDone = {
                             navController.navigate("home") {
                                 popUpTo("home") { inclusive = false }
@@ -217,14 +265,18 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                 WalletScreen(
                     state = state,
                     onReserve = viewModel::reserveOffline,
-                    onTransfer = viewModel::transferFromBank,
+                    onSync = viewModel::syncNow,
+                    onSetServerUrl = viewModel::setServerBaseUrl,
+                    onTransfer = viewModel::refreshBalancesFromBackend,
                     onHistory = { navController.navigate("history") },
+                    onClearHistory = viewModel::clearTransactions,
                     onMerchant = { transaction -> openTransaction(navController, viewModel, transaction) }
                 )
             }
             composable("history") {
                 HistoryScreen(
                     state = state,
+                    onClearHistory = viewModel::clearTransactions,
                     onMerchant = { transaction -> openTransaction(navController, viewModel, transaction) }
                 )
             }

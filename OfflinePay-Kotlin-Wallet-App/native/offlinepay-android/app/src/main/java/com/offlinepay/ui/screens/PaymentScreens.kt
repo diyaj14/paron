@@ -1,6 +1,9 @@
 package com.offlinepay.ui.screens
 
 import android.Manifest
+import android.bluetooth.BluetoothDevice
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -22,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,12 +33,18 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.BluetoothSearching
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.QrCode
 import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
@@ -50,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -59,12 +70,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.offlinepay.BuildConfig
 import com.offlinepay.data.AppUiState
 import com.offlinepay.data.PaymentMethod
 import com.offlinepay.data.WalletTransaction
 import com.offlinepay.ui.components.BackAction
-import com.offlinepay.ui.components.DemoBanner
 import com.offlinepay.ui.components.InfoRow
 import com.offlinepay.ui.components.MerchantRow
 import com.offlinepay.ui.components.OfflineNotice
@@ -106,7 +115,7 @@ fun MobilePayScreen(onBack: () -> Unit, onContinue: (String) -> Unit) {
                 )
             )
             Text(
-                "This app is in development mode. No UPI payment will be initiated.",
+                "Enter payee's mobile number or UPI ID for direct wallet transfer.",
                 color = MutedNavy,
                 fontSize = 12.sp,
                 lineHeight = 18.sp,
@@ -127,6 +136,7 @@ fun MobilePayScreen(onBack: () -> Unit, onContinue: (String) -> Unit) {
 fun QrScannerScreen(onBack: () -> Unit, onDetected: (String) -> Unit, onMobile: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
     var permissionGranted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -183,7 +193,7 @@ fun QrScannerScreen(onBack: () -> Unit, onDetected: (String) -> Unit, onMobile: 
             BackAction(onBack, dark = true)
             Text("Scan QR Code", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
         }
-        Text("Point your camera at the merchant's QR code.", color = Color(0xFFC9D9ED), fontSize = 14.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp))
+        Text("Point your camera at the merchant or payer QR code.", color = Color(0xFFC9D9ED), fontSize = 14.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp))
         Box(
             Modifier.fillMaxWidth().weight(1f).padding(horizontal = 20.dp, vertical = 14.dp)
                 .clip(RoundedCornerShape(22.dp)).background(Color(0xFF102746)),
@@ -243,7 +253,7 @@ fun PaymentDetailsScreen(
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 BackAction(onBack)
                 Spacer(Modifier.height(6.dp))
-                ScreenTitle("Payment Details", "Review the details and choose your payment method")
+                ScreenTitle("Payment Details", "Review details and choose your payment method")
             }
         }
         Column(Modifier.padding(horizontal = 16.dp)) {
@@ -286,7 +296,7 @@ fun PaymentDetailsScreen(
             Text("Select Payment Method", color = TrustIndigo, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
             MethodRow(
                 "Scan QR Code",
-                "Scan the merchant's QR code to pay.",
+                "Scan merchant QR code to pay.",
                 PaymentMethod.QR,
                 state.paymentMethod,
                 onMethodChange
@@ -294,16 +304,16 @@ fun PaymentDetailsScreen(
             Spacer(Modifier.height(9.dp))
             MethodRow(
                 "Enter Mobile Number",
-                "Enter UPI ID or mobile number to pay.",
+                "Enter UPI ID or phone number to pay.",
                 PaymentMethod.MOBILE,
                 state.paymentMethod,
                 onMethodChange
             )
             Text(
                 if (state.internetAvailable) {
-                    "UPI processing is not configured in this development build."
+                    "Online balance available: ₹${state.onlineBalance}. Tap confirm to complete transfer."
                 } else {
-                    "No internet connection detected. Use your offline balance instead."
+                    "No internet connection detected. Switch to offline balance."
                 },
                 color = MutedNavy,
                 fontSize = 12.sp,
@@ -363,110 +373,416 @@ private fun MethodRow(
 fun OfflinePaymentScreen(
     state: AppUiState,
     onBack: () -> Unit,
-    onPay: () -> Unit
+    onAmountChange: (String) -> Unit,
+    onNoteChange: (String) -> Unit,
+    pairedDevices: List<BluetoothDevice>,
+    onPayQr: () -> Unit,
+    onPayBluetooth: (BluetoothDevice) -> Unit
 ) {
+    val context = LocalContext.current
+    var selectedChannel by remember { mutableStateOf("BLUETOOTH") } // "BLUETOOTH" or "QR"
+    var selectedDevice by remember { mutableStateOf<BluetoothDevice?>(pairedDevices.firstOrNull()) }
+
+    LaunchedEffect(pairedDevices) {
+        if (selectedDevice == null && pairedDevices.isNotEmpty()) {
+            selectedDevice = pairedDevices.first()
+        }
+    }
+
+    val amountValue = state.paymentAmount.toDoubleOrNull() ?: 0.0
+    val isAmountValid = amountValue > 0 && amountValue <= state.offlineBalance
+
     Column(Modifier.fillMaxSize().background(WealthBeige).verticalScroll(rememberScrollState())) {
-        Box(Modifier.fillMaxWidth().height(242.dp).background(Color(0xFFFFFEFA))) {
+        Box(Modifier.fillMaxWidth().height(210.dp).background(Color(0xFFFFFEFA))) {
             WaveArt(Modifier.fillMaxSize(), dark = false)
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 BackAction(onBack)
-                Text("Offline Payment", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 27.sp, modifier = Modifier.padding(top = 10.dp))
+                Text("Offline P2P Payment", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 26.sp, modifier = Modifier.padding(top = 6.dp))
                 Text(
-                    "No internet connection detected.\nYou can still make payments using your offline balance.",
+                    "Pay peer-to-peer with 100% air-gap.\nSelect Bluetooth device pairing or visual QR code.",
                     color = MutedNavy,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    modifier = Modifier.padding(top = 7.dp)
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(top = 4.dp)
                 )
-                Icon(Icons.Rounded.WifiOff, null, tint = YieldBlue.copy(alpha = .55f), modifier = Modifier.align(Alignment.End).padding(end = 24.dp, top = 12.dp).size(56.dp))
+                Icon(Icons.Rounded.WifiOff, null, tint = YieldBlue.copy(alpha = .45f), modifier = Modifier.align(Alignment.End).padding(end = 20.dp).size(48.dp))
             }
         }
+
         Column(Modifier.padding(horizontal = 16.dp)) {
-            DemoBanner()
-            SectionCard(Modifier.padding(top = 13.dp)) {
+            // Amount & Note Card
+            SectionCard(Modifier.padding(top = 10.dp)) {
                 MerchantRow(state.selectedMerchant, "Merchant ID: ${state.merchantId}")
-                Box(Modifier.fillMaxWidth().padding(vertical = 12.dp).height(1.dp).background(LineBlue))
-                Text("Amount to Pay", color = MutedNavy, fontSize = 13.sp)
-                Text("₹${state.paymentAmount}", color = TrustIndigo, fontSize = 31.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
+                Box(Modifier.fillMaxWidth().padding(vertical = 10.dp).height(1.dp).background(LineBlue))
+                Text("Payment Amount", color = MutedNavy, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(
+                    value = state.paymentAmount,
+                    onValueChange = onAmountChange,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    singleLine = true,
+                    prefix = { Text("₹", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = TrustIndigo) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = YieldBlue,
+                        unfocusedBorderColor = LineBlue
+                    ),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = TrustIndigo,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+
+                OutlinedTextField(
+                    value = state.paymentNote,
+                    onValueChange = onNoteChange,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    singleLine = true,
+                    placeholder = { Text("Add note (e.g., Canteen Lunch)") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = YieldBlue,
+                        unfocusedBorderColor = LineBlue
+                    )
+                )
             }
+
+            // Offline Balance Status
             SectionCard(Modifier.padding(top = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(49.dp).clip(CircleShape).background(SoftBlue), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(44.dp).clip(CircleShape).background(SoftBlue), contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.AccountBalanceWallet, null, tint = YieldBlue)
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                        Text("Offline Balance", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        Text("₹${state.offlineBalance} remaining", color = MutedNavy, fontSize = 13.sp, modifier = Modifier.padding(top = 3.dp))
+                        Text("Active Offline Token Balance", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("₹${state.offlineBalance} available to spend", color = MutedNavy, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
                     }
-                    Text("›", color = TrustIndigo, fontSize = 23.sp)
                 }
                 androidx.compose.material3.LinearProgressIndicator(
-                    progress = { (state.offlineBalance / 500f).coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth().padding(start = 61.dp, top = 12.dp).height(8.dp).clip(CircleShape),
+                    progress = { (state.offlineBalance / 1000f).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth().padding(start = 56.dp, top = 10.dp).height(6.dp).clip(CircleShape),
                     color = YieldBlue,
                     trackColor = LineBlue
                 )
+                if (state.activeOfflineToken == null) {
+                    Text(
+                        "⚠️ No active token loaded. Go to Wallet to reserve offline balance from backend.",
+                        color = Color(0xFFC53030),
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
             }
+
+            // Transfer Mode Selector
+            Text("Transfer Channel", color = TrustIndigo, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ChannelChoiceTab(
+                    title = "Bluetooth P2P",
+                    subtitle = "Wireless RFCOMM",
+                    icon = Icons.Rounded.Bluetooth,
+                    selected = selectedChannel == "BLUETOOTH",
+                    onClick = { selectedChannel = "BLUETOOTH" },
+                    modifier = Modifier.weight(1f)
+                )
+                ChannelChoiceTab(
+                    title = "Visual QR Code",
+                    subtitle = "Camera Scan",
+                    icon = Icons.Rounded.QrCode,
+                    selected = selectedChannel == "QR",
+                    onClick = { selectedChannel = "QR" },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // Bluetooth Mode: Device Selection & Pairing
+            if (selectedChannel == "BLUETOOTH") {
+                SectionCard(Modifier.padding(top = 14.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Select Nearby / Paired Device", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(
+                            "Pair in Settings ⚙️",
+                            color = YieldBlue,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable {
+                                try {
+                                    context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                                } catch (_: Exception) {}
+                            }
+                        )
+                    }
+
+                    Text(
+                        "Select payee phone to transmit ECDSA-signed claim via Bluetooth socket.",
+                        color = MutedNavy,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 3.dp, bottom = 10.dp)
+                    )
+
+                    if (pairedDevices.isEmpty()) {
+                        Box(
+                            Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFF2F6FA))
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Rounded.BluetoothSearching, null, tint = MutedNavy, modifier = Modifier.size(34.dp))
+                                Text(
+                                    "No paired Bluetooth devices detected.",
+                                    color = TrustIndigo,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.padding(top = 6.dp)
+                                )
+                                Text(
+                                    "Tap 'Pair in Settings' above to pair the payee phone.",
+                                    color = MutedNavy,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            pairedDevices.forEach { device ->
+                                val isChosen = selectedDevice?.address == device.address
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isChosen) Color(0xFFEAF5FF) else Color(0xFFF8FAFC))
+                                        .border(if (isChosen) 1.5.dp else 1.dp, if (isChosen) YieldBlue else LineBlue, RoundedCornerShape(12.dp))
+                                        .clickable { selectedDevice = device }
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        Modifier.size(38.dp).clip(CircleShape).background(if (isChosen) YieldBlue else SoftBlue),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Smartphone,
+                                            null,
+                                            tint = if (isChosen) Color.White else YieldBlue,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                                        Text(
+                                            device.name ?: "Nearby Android Device",
+                                            color = TrustIndigo,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                        Text(device.address, color = MutedNavy, fontSize = 11.sp)
+                                    }
+                                    RadioButton(selected = isChosen, onClick = { selectedDevice = device })
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+                    PrimaryAction(
+                        text = if (selectedDevice != null) "Pay ₹${state.paymentAmount} via Bluetooth to ${selectedDevice?.name ?: "Phone"}" else "Select Device to Pay",
+                        onClick = {
+                            selectedDevice?.let(onPayBluetooth)
+                        },
+                        enabled = selectedDevice != null && isAmountValid && state.activeOfflineToken != null,
+                        trailingArrow = true
+                    )
+                }
+            } else {
+                // QR Code Mode
+                SectionCard(Modifier.padding(top = 14.dp)) {
+                    Text("Visual Air-Gapped Handover", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(
+                        "Generates an offline QR containing ECDSA-signed claim. Payee phone scans directly with camera.",
+                        color = MutedNavy,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 3.dp, bottom = 12.dp)
+                    )
+
+                    PrimaryAction(
+                        text = "Generate ₹${state.paymentAmount} Offline QR",
+                        onClick = onPayQr,
+                        enabled = isAmountValid && state.activeOfflineToken != null,
+                        trailingArrow = true
+                    )
+                }
+            }
+
             OfflineNotice(
-                "This transaction will be saved locally and verified once you reconnect to the internet.",
-                Modifier.padding(top = 12.dp)
-            )
-            Text(
-                "Development-only local record. Token validation and reconciliation are not configured.",
-                color = MutedNavy,
-                fontSize = 11.sp,
-                lineHeight = 16.sp,
-                modifier = Modifier.padding(top = 10.dp)
-            )
-            PrimaryAction(
-                "Pay Using Offline Token",
-                onClick = onPay,
-                modifier = Modifier.padding(top = 14.dp, bottom = 20.dp),
-                enabled = BuildConfig.DEMO_MODE,
-                trailingArrow = true
+                "Each transaction is cryptographically signed using this phone's hardware ECDSA key. When internet returns, Sync Service settles funds on the central bank ledger.",
+                Modifier.padding(top = 14.dp, bottom = 24.dp)
             )
         }
     }
 }
 
 @Composable
+private fun ChannelChoiceTab(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (selected) Color(0xFFEAF5FF) else Color(0xFFFFFEFA))
+            .border(if (selected) 2.dp else 1.dp, if (selected) YieldBlue else LineBlue, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            Modifier.size(40.dp).clip(CircleShape).background(if (selected) YieldBlue else SoftBlue),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = if (selected) Color.White else YieldBlue, modifier = Modifier.size(22.dp))
+        }
+        Text(title, color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+        Text(subtitle, color = MutedNavy, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+    }
+}
+
+@Composable
 fun PaymentSavedScreen(
+    state: AppUiState,
     transaction: WalletTransaction,
+    onSendBluetooth: (BluetoothDevice) -> Unit,
+    onSync: () -> Unit,
+    pairedDevices: List<BluetoothDevice>,
     onDone: () -> Unit
 ) {
+    val context = LocalContext.current
+    var showBtDialog by remember { mutableStateOf(false) }
+
     Column(
         Modifier.fillMaxSize().background(WealthBeige).verticalScroll(rememberScrollState()).padding(horizontal = 17.dp)
     ) {
-        Box(Modifier.fillMaxWidth().height(244.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
             WaveArt(Modifier.fillMaxSize(), dark = false)
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(94.dp).clip(CircleShape).background(YieldBlue), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(57.dp))
+                Box(Modifier.size(70.dp).clip(CircleShape).background(YieldBlue), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(44.dp))
                 }
-                Text("Payment Successful", color = TrustIndigo, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 18.dp))
+                Text("Offline Payment Signed", color = TrustIndigo, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
                 Text(
-                    "Payment of ₹${transaction.amountRupees} saved using your offline balance.",
+                    "₹${transaction.amountRupees} signed with device ECDSA key.",
                     color = MutedNavy,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.padding(top = 5.dp)
+                    modifier = Modifier.padding(top = 2.dp)
                 )
             }
         }
-        DemoBanner()
-        SectionCard(Modifier.padding(top = 14.dp)) {
-            MerchantRow(transaction.merchant, "Merchant ID: local demo")
+
+        // P2P Handover Options
+        SectionCard(Modifier.padding(top = 8.dp)) {
+            Text("P2P Transmission", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text("Let the receiver phone scan this QR or transmit via Bluetooth.", color = MutedNavy, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp, bottom = 10.dp))
+
+            if (state.lastQrPayload != null) {
+                val bitmap = remember(state.lastQrPayload) {
+                    com.offlinepay.util.QrCodeGenerator.generateQrBitmap(state.lastQrPayload, 400)
+                }
+                if (bitmap != null) {
+                    Box(
+                        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        androidx.compose.foundation.Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Offline Payment QR",
+                            modifier = Modifier.size(200.dp).clip(RoundedCornerShape(12.dp))
+                        )
+                    }
+                    Text("Show this QR to payee camera to verify offline.", textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MutedNavy, fontSize = 11.sp, modifier = Modifier.fillMaxWidth())
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PrimaryAction(
+                    "Send via Bluetooth",
+                    onClick = { showBtDialog = true },
+                    modifier = Modifier.weight(1f)
+                )
+                if (state.internetAvailable) {
+                    PrimaryAction(
+                        "Sync to Backend",
+                        onClick = onSync,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        SectionCard(Modifier.padding(top = 12.dp)) {
+            MerchantRow(transaction.merchant, "Txn: ${transaction.id}")
             Box(Modifier.fillMaxWidth().padding(vertical = 10.dp).height(1.dp).background(LineBlue))
             InfoRow("Amount Paid", "₹${transaction.amountRupees}", emphasize = true)
             InfoRow("Payment Method", transaction.method)
             InfoRow("Date & Time", transaction.dateLabel)
             InfoRow("Transaction ID", transaction.id)
-            StatusBadge("Pending verification · demo only", pending = true)
+            StatusBadge("Signed Offline • Queued for Settlement", pending = true)
         }
+
         OfflineNotice(
-            "This local development record is not a real payment. It will not be settled or reconciled.",
+            "This payment is cryptographically signed. Once either device connects to the internet, Sync Service settles it atomically on the ledger.",
             Modifier.padding(top = 12.dp)
         )
-        PrimaryAction("Done", onDone, modifier = Modifier.padding(top = 15.dp, bottom = 22.dp))
+        PrimaryAction("Done", onDone, modifier = Modifier.padding(top = 14.dp, bottom = 22.dp))
+
+        // Bluetooth devices dialog
+        if (showBtDialog) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showBtDialog = false },
+                title = { Text("Select Payee Phone (Bluetooth)") },
+                text = {
+                    Column {
+                        if (pairedDevices.isEmpty()) {
+                            Text("No paired Bluetooth devices found. Pair the phones in Android Settings first.")
+                        } else {
+                            pairedDevices.forEach { dev ->
+                                Text(
+                                    text = "📱 ${dev.name ?: "Unknown"} (${dev.address})",
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        showBtDialog = false
+                                        onSendBluetooth(dev)
+                                    }.padding(vertical = 10.dp),
+                                    fontWeight = FontWeight.Medium,
+                                    color = TrustIndigo
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    OutlinedButton(onClick = {
+                        showBtDialog = false
+                        try {
+                            context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                        } catch (_: Exception) {}
+                    }) {
+                        Text("Bluetooth Settings")
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = { showBtDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
     }
 }
