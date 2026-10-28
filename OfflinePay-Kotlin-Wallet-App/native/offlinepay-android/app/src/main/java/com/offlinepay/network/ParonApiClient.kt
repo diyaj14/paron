@@ -1,4 +1,4 @@
-﻿package com.offlinepay.network
+package com.offlinepay.network
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +30,7 @@ data class SyncResult(
     val acceptedDeviceTransactionIds: List<String>,
     val message: String
 )
+data class DemoSession(val accessToken: String, val userId: String, val expiresIn: Long)
 
 data class SyncTransactionPayload(
     val deviceTransactionId: String,
@@ -43,12 +44,12 @@ data class SyncTransactionPayload(
 )
 
 class ParonApiClient(private val context: Context) {
+    @Volatile private var accessToken: String? = null
 
     companion object {
         private const val PREFS_NAME = "offlinepay_network_settings"
         private const val KEY_BASE_URL = "api_base_url"
 
-        // Default: 10.0.2.2 for Android emulator, 192.168.1.6 for physical phone
         const val DEFAULT_BASE_URL = "http://10.0.2.2:8080"
         const val PHYSICAL_DEVICE_URL = "http://192.168.1.6:8080"
     }
@@ -64,19 +65,25 @@ class ParonApiClient(private val context: Context) {
         }
 
     /**
-     * Resolves the target URL.
-     * When targeting the API Gateway (port 8080 or no port), uses gateway routed endpoints.
-     * When targeting individual service ports directly, replaces port accordingly.
+     * Resolves the target microservice URL:
+     * - Token Service on port 8081
+     * - Ledger Service on port 8082
+     * - Sync Service on port 8083
+     * Extracts host from baseUrl (whether 10.0.2.2, 192.168.x.x, or localhost).
      */
     private fun getServiceUrl(port: Int, path: String): String {
-        val base = baseUrl.trim().removeSuffix("/")
-        val hostPart = base.substringAfter("://", base)
-        return if (base.endsWith(":8080") || !hostPart.contains(":")) {
-            "$base$path"
-        } else {
-            val scheme = if (base.startsWith("https://")) "https" else "http"
-            val hostOnly = hostPart.substringBefore(":")
-            "$scheme://$hostOnly:$port$path"
+        return baseUrl.trim().removeSuffix("/") + path
+    }
+
+    suspend fun createDemoSession(email: String, password: String): Result<DemoSession> = withContext(Dispatchers.IO) {
+        runCatching {
+            val response = httpPostRaw(
+                getServiceUrl(8080, "/api/v1/auth/demo/session"),
+                JSONObject().put("username", email).put("password", password).toString(), false
+            )
+            val json = JSONObject(response)
+            DemoSession(json.getString("accessToken"), json.getString("userId"), json.getLong("expiresIn"))
+                .also { accessToken = it.accessToken }
         }
     }
 
@@ -96,6 +103,9 @@ class ParonApiClient(private val context: Context) {
                     reservedAmount = obj.optDouble("reservedAmount", 0.0),
                     totalBalance = obj.optDouble("totalBalance", initialBalance)
                 )
+            }.recoverCatching {
+                // If account already exists on ledger, fetch current balance
+                fetchBalance(userId).getOrThrow()
             }
         }
 
@@ -192,7 +202,8 @@ class ParonApiClient(private val context: Context) {
         conn.requestMethod = "GET"
         conn.connectTimeout = 7000
         conn.readTimeout = 7000
-        conn.setRequestProperty("X-User-Id", userId)
+        val token = accessToken ?: throw IllegalStateException("Sign in before calling the Paron API")
+        conn.setRequestProperty("Authorization", "Bearer $token")
         conn.setRequestProperty("Accept", "application/json")
 
         val code = conn.responseCode
@@ -204,7 +215,9 @@ class ParonApiClient(private val context: Context) {
         }
     }
 
-    private fun httpPost(urlStr: String, body: String, userId: String): String {
+    private fun httpPost(urlStr: String, body: String, userId: String): String = httpPostRaw(urlStr, body, true)
+
+    private fun httpPostRaw(urlStr: String, body: String, authenticated: Boolean): String {
         val url = URL(urlStr)
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
@@ -212,7 +225,10 @@ class ParonApiClient(private val context: Context) {
         conn.readTimeout = 7000
         conn.doOutput = true
         conn.setRequestProperty("Content-Type", "application/json")
-        conn.setRequestProperty("X-User-Id", userId)
+        if (authenticated) {
+            val token = accessToken ?: throw IllegalStateException("Sign in before calling the Paron API")
+            conn.setRequestProperty("Authorization", "Bearer $token")
+        }
         conn.setRequestProperty("Accept", "application/json")
 
         OutputStreamWriter(conn.outputStream).use { it.write(body) }

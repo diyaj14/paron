@@ -102,6 +102,24 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
         return false
     }
 
+    /** The demo OTP is verified by auth-service and yields the gateway JWT. */
+    fun authenticateDemo(code: String, onAuthenticated: () -> Unit) {
+        val phoneNumber = _uiState.value.phoneNumber
+        if (phoneNumber.length != 10) {
+            _uiState.update { it.copy(message = "Enter your phone number before signing in.") }
+            return
+        }
+        viewModelScope.launch {
+            apiClient.createDemoSession(phoneNumber, code).onSuccess { session ->
+                _uiState.update { it.copy(authenticated = true, message = "Signed in as ${session.userId}.") }
+                refreshBalancesFromBackend()
+                onAuthenticated()
+            }.onFailure { error ->
+                _uiState.update { it.copy(message = "Sign-in failed: ${error.message}") }
+            }
+        }
+    }
+
     fun setMerchant(name: String, merchantId: String = "merchant_canteen") {
         _uiState.update {
             it.copy(
@@ -138,7 +156,9 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
      * 1. Query live balance from Ledger Service.
      */
     fun refreshBalancesFromBackend() {
-        val currentUserId = _uiState.value.phoneNumber.ifBlank { "9876543210" }
+        // The auth-service JWT subject is the verified phone number. Keep every
+        // ledger call tied to that subject; a display name is not an account ID.
+        val currentUserId = _uiState.value.phoneNumber.ifBlank { return }
         viewModelScope.launch {
             apiClient.createTestAccount(currentUserId, 1000.0)
             val balanceRes = apiClient.fetchBalance(currentUserId)
@@ -180,7 +200,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.update { it.copy(isReserving = true, message = "Requesting offline token from backend...") }
 
         viewModelScope.launch {
-            val userId = state.phoneNumber.ifBlank { "9876543210" }
+            val userId = state.phoneNumber.ifBlank { return@launch }
             val deviceId = getDeviceId()
 
             val result = apiClient.requestOfflineToken(
@@ -373,7 +393,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                 )
             }
 
-            val userId = current.phoneNumber.ifBlank { "9876543210" }
+            val userId = current.phoneNumber.ifBlank { return@launch }
             val syncRes = apiClient.syncOfflineTransactions(userId, payloads)
 
             syncRes.onSuccess { res ->
@@ -601,7 +621,9 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             userName = savedName,
             userEmail = savedEmail,
             phoneNumber = savedPhone,
-            authenticated = savedName.isNotBlank() && savedEmail.isNotBlank(),
+            // Session JWTs deliberately remain in memory. A saved display name
+            // must never restore an authenticated session after an app restart.
+            authenticated = false,
             onlineBalance = demoStore.getInt(KEY_ONLINE_BALANCE, defaultState.onlineBalance),
             offlineBalance = demoStore.getInt(KEY_OFFLINE_BALANCE, defaultState.offlineBalance),
             activeOfflineToken = demoStore.getString(KEY_OFFLINE_TOKEN, null),

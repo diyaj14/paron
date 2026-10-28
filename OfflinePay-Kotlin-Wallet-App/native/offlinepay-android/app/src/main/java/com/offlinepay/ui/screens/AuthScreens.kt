@@ -147,7 +147,9 @@ fun SignInChoiceScreen(onBack: () -> Unit, onContinue: () -> Unit) {
 @Composable
 fun PhoneEntryScreen(
     phoneNumber: String,
+    name: String,
     onPhoneChange: (String) -> Unit,
+    onNameChange: (String) -> Unit,
     onBack: () -> Unit,
     onContinue: () -> Unit
 ) {
@@ -164,8 +166,20 @@ fun PhoneEntryScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 colors = authFieldColors()
             )
+            Spacer(Modifier.height(18.dp))
+            Text("FULL NAME", color = Color(0xFFB9C9DC), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            OutlinedTextField(
+                value = name,
+                onValueChange = onNameChange,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                singleLine = true,
+                leadingIcon = { androidx.compose.material3.Icon(Icons.Rounded.Person, null, tint = GlacierBlue) },
+                placeholder = { Text("e.g. Diya Joshy", color = Color(0xFF8FA5BF)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                colors = authFieldColors()
+            )
             Spacer(Modifier.height(22.dp))
-            PrimaryAction("Continue", onContinue, enabled = phoneNumber.length == 10, trailingArrow = true)
+            PrimaryAction("Continue", onContinue, enabled = phoneNumber.length == 10 && name.trim().length >= 2, trailingArrow = true)
             if (BuildConfig.DEMO_MODE) {
                 Text(
                     "DEVELOPMENT MODE • Phone verification is ready for demo.",

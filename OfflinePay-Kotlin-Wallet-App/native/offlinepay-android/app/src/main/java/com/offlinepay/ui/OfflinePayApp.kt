@@ -61,7 +61,7 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
     var otp by rememberSaveable { mutableStateOf("") }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val isUserFullyOnboarded = state.authenticated && state.userName.isNotBlank() && state.userEmail.isNotBlank()
+    val isUserFullyOnboarded = state.authenticated && state.userName.isNotBlank()
     val showBottomBar = isUserFullyOnboarded && currentRoute in setOf("home", "wallet", "history")
 
     LaunchedEffect(state.message) {
@@ -117,7 +117,9 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
             composable("phone") {
                 PhoneEntryScreen(
                     phoneNumber = state.phoneNumber,
+                    name = state.userName,
                     onPhoneChange = viewModel::setPhoneNumber,
+                    onNameChange = viewModel::setUserName,
                     onBack = { navController.popBackStack() },
                     onContinue = { navController.navigate("otp") }
                 )
@@ -129,9 +131,9 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onCodeChange = { otp = it.filter(Char::isDigit).take(6) },
                     onBack = { navController.popBackStack() },
                     onVerify = {
-                        if (viewModel.verifyOtp(otp)) {
+                        viewModel.authenticateDemo(otp) {
                             otp = ""
-                            if (state.userName.isBlank() || state.userEmail.isBlank()) {
+                            if (state.userName.isBlank()) {
                                 navController.navigate("profile") {
                                     popUpTo("onboarding") { inclusive = false }
                                 }
