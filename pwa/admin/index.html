@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0a6cff">
+    <link rel="stylesheet" href="../public/styles.css">
+    <title>Paron Admin — Fraud Review Queue</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header><span class="logo">P</span><div><h1>Paron Admin</h1><p>Human in the loop · fraud review queue</p></div></header>
+      <section class="card wallet">
+        <div>
+          <p class="eyebrow">OPERATOR VIEW</p>
+          <strong>Nothing settles on the AI's word alone.</strong>
+          <p>Every non-approved transaction is queued here for a human decision. The model flags, you decide.</p>
+        </div>
+      </section>
+      <section class="card">
+        <div class="section-title"><h2>Alerts needing a human</h2><button id="load-alerts" class="secondary small">Refresh queue</button></div>
+        <label>API base URL <input id="api-base" placeholder="https://your-gateway.example"></label>
+        <div id="fraud-alerts" class="transactions"><p class="hint">Click "Refresh queue" to load.</p></div>
+      </section>
+      <section class="card">
+        <h2>Resolve dispute (AI Judge)</h2>
+        <p class="hint">Two receipts below argue over the same payment. The arbiter re-verifies each signature, checks the token spend state, and hands down a deterministic, auditable verdict. The LLM, if configured, only writes the summary — it never decides.</p>
+        <label>Device txn A <input id="dispute-txn-a" placeholder="device transaction id"></label>
+        <label>Device txn B <input id="dispute-txn-b" placeholder="device transaction id"></label>
+        <div class="actions"><button id="resolve-dispute" class="secondary">Resolve dispute</button></div>
+        <div id="dispute-result" class="dispute-result"></div>
+      </section>
+      <p id="notice" class="notice" aria-live="polite"></p>
+    </main>
+    <script src="./admin.js"></script>
+  </body>
+</html>

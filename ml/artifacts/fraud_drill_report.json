@@ -4,7 +4,7 @@
   "scenarios_total": 8,
   "passed": 8,
   "failed": 0,
-  "elapsed_ms": 853.9,
+  "elapsed_ms": 602.7,
   "decision_policy": {
     "any_rule_hit": "REJECT",
     "approve_below": 0.15,

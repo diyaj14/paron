@@ -2,7 +2,7 @@
 
 **Mode:** offline model artifact
 **Scenarios:** 8  |  **Passed:** 8  |  **Failed:** 0
-**Elapsed:** 854 ms
+**Elapsed:** 603 ms
 
 | Scenario | Expected | Actual | Score | Result | Notes |
 |---|---|---|---|---|---|

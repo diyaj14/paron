@@ -43,10 +43,10 @@ Decision distribution: 1438 APPROVE / 187 HOLD / 375 REJECT
 
 ## Latency
 
-- Mean: 3.73ms
-- P50: 3.74ms
-- P95: 4.9ms
-- P99: 5.08ms
+- Mean: 3.42ms
+- P50: 3.69ms
+- P95: 3.93ms
+- P99: 3.93ms
 - Batch size: 2000
 
 ## Failure Modes

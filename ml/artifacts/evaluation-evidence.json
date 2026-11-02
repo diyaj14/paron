@@ -56,10 +56,10 @@
     "fp_cost_reduction_inr": 64500.0
   },
   "latency": {
-    "mean_ms": 3.73,
-    "p50_ms": 3.74,
-    "p95_ms": 4.9,
-    "p99_ms": 5.08,
+    "mean_ms": 3.42,
+    "p50_ms": 3.69,
+    "p95_ms": 3.93,
+    "p99_ms": 3.93,
     "n_runs": 5,
     "batch_size": 2000
   },

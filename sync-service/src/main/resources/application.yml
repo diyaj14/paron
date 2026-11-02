@@ -74,6 +74,16 @@ services:
   fraud:
     url: ${FRAUD_SERVICE_URL:http://localhost:8084}
 
+# ─── AI Judge — optional LLM summary (OpenAI-compatible, e.g. OpenRouter)──
+# The LLM only writes the human-readable verdict summary. The binding ruling
+# always comes from the deterministic rule tree; no LLM key -> template summary.
+adjudicator:
+  llm:
+    enabled: ${ADJUDICATOR_LLM_ENABLED:false}
+    url: ${ADJUDICATOR_LLM_URL:https://openrouter.ai/api/v1/chat/completions}
+    api-key: ${ADJUDICATOR_LLM_API_KEY:}
+    model: ${ADJUDICATOR_LLM_MODEL:openai/gpt-4o-mini}
+
 # ─── Resilience4j — protects against a slow/unavailable ledger-service ────
 resilience4j:
   circuitbreaker:
