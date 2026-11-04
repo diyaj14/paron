@@ -60,7 +60,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.offlinepay.data.AppUiState
+import com.offlinepay.data.RiskSeverity
+import com.offlinepay.data.SyncEvent
 import com.offlinepay.data.TransactionStatus
+import com.offlinepay.data.formatRupees
 import com.offlinepay.data.WalletTransaction
 import com.offlinepay.ui.components.DarkHero
 import com.offlinepay.ui.components.MerchantIcon
@@ -112,16 +115,16 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Welcome to OfflinePay,", color = Color(0xFFBACBDD), fontSize = 13.sp)
+                        Text("Welcome to Paron,", color = Color(0xFFBACBDD), fontSize = 13.sp)
                         val displayName = state.userName.ifBlank { "User" }
                         Text(displayName, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        Text(
-                            if (state.userEmail.isNotBlank()) "${state.userEmail} • +91 ${state.phoneNumber}"
-                            else "+91 ${state.phoneNumber}",
-                            color = Color(0xFFBACBDD),
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
+//                        Text(
+//                            if (state.userEmail.isNotBlank()) "${state.userEmail} • +91 ${state.phoneNumber}"
+//                            else "+91 ${state.phoneNumber}",
+//                            color = Color(0xFFBACBDD),
+//                            fontSize = 12.sp,
+//                            modifier = Modifier.padding(top = 2.dp)
+//                        )
                     }
 
                     // Network toggle button (Simulate Offline / Online)
@@ -257,7 +260,6 @@ fun HomeScreen(
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text("$pendingCount Offline Payment(s) Queued", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text("Tap to sync with backend & Kafka settlement", color = MutedNavy, fontSize = 12.sp)
                     }
                     if (state.isSyncing) {
                         CircularProgressIndicator(modifier = Modifier.size(22.dp), color = YieldBlue, strokeWidth = 2.dp)
@@ -279,7 +281,7 @@ fun HomeScreen(
 
             SectionCard {
                 if (state.transactions.isEmpty()) {
-                    Text("No transactions yet. Complete a payment or reserve offline tokens to start tracking.", color = MutedNavy, fontSize = 13.sp, modifier = Modifier.padding(12.dp))
+                    Text("No transactions yet.", color = MutedNavy, fontSize = 13.sp, modifier = Modifier.padding(12.dp))
                 } else {
                     state.transactions.take(4).forEachIndexed { index, transaction ->
                         TransactionLine(transaction, onClick = { onMerchant(transaction) }, showStatus = true)
@@ -403,16 +405,17 @@ fun WalletScreen(
     onSync: () -> Unit,
     onSetServerUrl: (String) -> Unit,
     onTransfer: () -> Unit,
+    onPaypalTopUp: (String) -> Unit,
     onHistory: () -> Unit,
     onClearHistory: () -> Unit,
     onMerchant: (WalletTransaction) -> Unit
 ) {
     var reserveAmount by remember { mutableStateOf("300") }
+    var paypalAmount by remember { mutableStateOf("10.00") }
     var customUrl by remember { mutableStateOf(state.serverBaseUrl) }
 
     Column(Modifier.fillMaxSize().background(WealthBeige).verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Text("Wallet & Offline Tokens", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 26.sp, modifier = Modifier.padding(top = 12.dp))
-        Text("Manage balances, reserve offline tokens, and view profile.", color = MutedNavy, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
+        Text("Wallet", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 26.sp, modifier = Modifier.padding(top = 12.dp, bottom = 16.dp))
 
         // Total Balance
         Box(
@@ -432,38 +435,39 @@ fun WalletScreen(
             WalletBalanceCard("Offline Token", "₹${state.offlineBalance}", Icons.Rounded.WifiOff, Modifier.weight(1f))
         }
 
-        // User Profile Card
-        SectionCard(Modifier.padding(top = 16.dp)) {
-            Text("Registered Account Profile", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.Person, null, tint = YieldBlue, modifier = Modifier.size(18.dp))
-                Text(state.userName.ifBlank { "User" }, color = TrustIndigo, fontWeight = FontWeight.Medium, fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
-            }
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.Email, null, tint = YieldBlue, modifier = Modifier.size(18.dp))
-                Text(state.userEmail.ifBlank { "Not provided" }, color = MutedNavy, fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
-            }
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.PhoneAndroid, null, tint = YieldBlue, modifier = Modifier.size(18.dp))
-                Text("+91 ${state.phoneNumber}", color = MutedNavy, fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
-            }
+        Text("Add funds with PayPal", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+        SectionCard {
+            Text("PayPal Sandbox checkout", color = MutedNavy, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+            OutlinedTextField(
+                value = paypalAmount,
+                onValueChange = { value -> paypalAmount = value.filter { it.isDigit() || it == '.' }.take(8) },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                singleLine = true,
+                prefix = { Text("USD $") },
+                label = { Text("Sandbox amount") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+            )
+            PrimaryAction(
+                if (state.isFunding) "Opening PayPal…" else "Continue with PayPal Sandbox",
+                onClick = { onPaypalTopUp(paypalAmount) },
+                modifier = Modifier.padding(top = 10.dp),
+                enabled = !state.isFunding && state.authenticated && state.internetAvailable && paypalAmount.toDoubleOrNull()?.let { it > 0 } == true
+            )
+            Text("Sandbox only. Demo conversion: USD 1 = ₹85. Wallet updates after backend capture.", color = MutedNavy, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
         }
 
         // Active Offline Token Info
         SectionCard(Modifier.padding(top = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    if (state.activeOfflineToken != null) Icons.Rounded.CheckCircle else Icons.Rounded.WifiOff,
-                    null,
-                    tint = if (state.activeOfflineToken != null) Color(0xFF38A169) else Color(0xFFE53E3E),
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(Modifier.width(8.dp))
+//                Icon(
+//                    if (state.activeOfflineToken != null) Icons.Rounded.CheckCircle else Icons.Rounded.WifiOff,
+//                    null,
+//                    tint = if (state.activeOfflineToken != null) Color(0xFF38A169) else Color(0xFFE53E3E),
+//                    modifier = Modifier.size(24.dp)
+//                )
+//                Spacer(Modifier.width(8.dp))
                 Text(
-                    if (state.activeOfflineToken != null) "Active Backend Offline Token Loaded" else "No Active Offline Token",
+                    if (state.activeOfflineToken != null) "Offline token active" else "No active offline token",
                     color = TrustIndigo,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp
@@ -477,10 +481,8 @@ fun WalletScreen(
             }
         }
 
-        // Reserve Token from Backend Section
-        Text("Reserve Offline Funds", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+        Text("Reserve funds", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
         SectionCard {
-            Text("Locks funds on Ledger Service (Port 8082) and issues a signed JWT Token (Port 8081) for offline phone-to-phone spending.", color = MutedNavy, fontSize = 13.sp, lineHeight = 18.sp)
             OutlinedTextField(
                 value = reserveAmount,
                 onValueChange = { reserveAmount = it.filter(Char::isDigit).take(6) },
@@ -496,7 +498,7 @@ fun WalletScreen(
             )
 
             PrimaryAction(
-                if (state.isReserving) "Reserving from Backend..." else "Reserve from Backend",
+                if (state.isReserving) "Reserving..." else "Reserve",
                 onClick = { onReserve(reserveAmount) },
                 modifier = Modifier.padding(top = 12.dp),
                 enabled = reserveAmount.isNotBlank() && !state.isReserving
@@ -506,7 +508,6 @@ fun WalletScreen(
         // Backend Server Setting
         Text("Backend Server Address", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
         SectionCard {
-            Text("Select target host based on where you are running the app:", color = MutedNavy, fontSize = 12.sp)
             Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryAction(
                     "Emulator (10.0.2.2)",
@@ -616,6 +617,100 @@ fun HistoryScreen(
     }
 }
 
+/**
+ * Read-only demo view for a risk operator. It presents evidence recorded on the
+ * device and outcomes returned by sync; it does not make settlement decisions.
+ */
+@Composable
+fun AdminRiskScreen(state: AppUiState, onSync: () -> Unit) {
+    val pending = state.transactions.filter { it.status == TransactionStatus.PENDING_VERIFICATION }
+    val duplicateIds = state.transactions.groupBy { it.id }.filterValues { it.size > 1 }.keys
+    val offlineClaims = state.transactions.filter { it.offlineToken != null }
+    val claimedAmount = offlineClaims.sumOf { it.amountRupees }
+    val inferredAllowance = claimedAmount + state.offlineBalance
+    val hasReview = state.syncEvents.any { it.severity != RiskSeverity.INFO } || duplicateIds.isNotEmpty()
+
+    Column(
+        Modifier.fillMaxSize().background(WealthBeige).verticalScroll(rememberScrollState()).padding(16.dp)
+    ) {
+        Text("Admin Risk Console", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 25.sp)
+        Text(
+            "Demo-only, read-only operator view. The backend remains the authority for settlement.",
+            color = MutedNavy, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+        )
+
+        SectionCard {
+            Text("Live reconciliation", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(Modifier.height(8.dp))
+            Text("Queued receipts: ${pending.size}", color = MutedNavy, fontSize = 13.sp)
+            Text("Claimed against current allowance: ₹$claimedAmount / ₹$inferredAllowance", color = MutedNavy, fontSize = 13.sp, modifier = Modifier.padding(top = 3.dp))
+            PrimaryAction(
+                if (state.isSyncing) "Synchronizing…" else "Sync queued receipts",
+                onClick = onSync,
+                enabled = !state.isSyncing && pending.isNotEmpty(),
+                modifier = Modifier.padding(top = 12.dp)
+            )
+        }
+
+        Text("Risk checks", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+        SectionCard {
+            if (duplicateIds.isNotEmpty()) {
+                RiskRow("High", "Duplicate transaction ID detected", "${duplicateIds.size} duplicate receipt ID(s) require backend rejection.", RiskSeverity.HIGH)
+            } else if (hasReview) {
+                RiskRow("Review", "Sync exception detected", "A receipt needs backend review. The app cannot override it.", RiskSeverity.REVIEW)
+            } else {
+                RiskRow("Clear", "No local conflict found", "Signature, duplicate-ID and allowance checks are confirmed during synchronization.", RiskSeverity.INFO)
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "AI-assisted triage can prioritize suspicious patterns after reconnection; it cannot undo goods handed over offline.",
+                color = MutedNavy, fontSize = 12.sp, lineHeight = 17.sp
+            )
+        }
+
+        Text("Synchronization timeline", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+        SectionCard {
+            if (state.syncEvents.isEmpty()) {
+                Text("No events yet. Reserve funds, make an offline payment, then reconnect to populate this timeline.", color = MutedNavy, fontSize = 13.sp)
+            } else {
+                state.syncEvents.take(8).forEachIndexed { index, event ->
+                    SyncEventRow(event)
+                    if (index != state.syncEvents.take(8).lastIndex) Spacer(Modifier.height(12.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RiskRow(level: String, title: String, detail: String, severity: RiskSeverity) {
+    val color = when (severity) {
+        RiskSeverity.HIGH -> Color(0xFFC53030)
+        RiskSeverity.REVIEW -> Color(0xFFC05621)
+        RiskSeverity.INFO -> Color(0xFF277455)
+    }
+    Text(level.uppercase(), color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    Text(title, color = TrustIndigo, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 3.dp))
+    Text(detail, color = MutedNavy, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+}
+
+@Composable
+private fun SyncEventRow(event: SyncEvent) {
+    val color = when (event.severity) {
+        RiskSeverity.HIGH -> Color(0xFFC53030)
+        RiskSeverity.REVIEW -> Color(0xFFC05621)
+        RiskSeverity.INFO -> YieldBlue
+    }
+    Row(verticalAlignment = Alignment.Top) {
+        Box(Modifier.size(9.dp).clip(CircleShape).background(color).padding(top = 4.dp))
+        Column(Modifier.padding(start = 10.dp)) {
+            Text(event.label, color = TrustIndigo, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Text(event.detail, color = MutedNavy, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+            Text(event.occurredAt, color = MutedNavy, fontSize = 10.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+    }
+}
+
 @Composable
 fun TransactionLine(transaction: WalletTransaction, onClick: () -> Unit, showStatus: Boolean = false) {
     Row(
@@ -631,14 +726,20 @@ fun TransactionLine(transaction: WalletTransaction, onClick: () -> Unit, showSta
             Text("${transaction.method} • ${transaction.dateLabel}", color = MutedNavy, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
             if (showStatus) {
                 Spacer(Modifier.height(4.dp))
-                StatusBadge(
-                    if (transaction.status == TransactionStatus.PENDING_VERIFICATION) "Pending Sync (Offline)" else "Settled on Bank Ledger",
-                    pending = transaction.status == TransactionStatus.PENDING_VERIFICATION
-                )
+                val statusLabel = when (transaction.status) {
+                    TransactionStatus.PENDING_VERIFICATION -> "Pending Sync (Offline)"
+                    TransactionStatus.FAILED -> if (transaction.method.contains("Online", ignoreCase = true)) {
+                        "Online payment unavailable — no debit"
+                    } else {
+                        transaction.dateLabel
+                    }
+                    else -> "Settled on Bank Ledger"
+                }
+                StatusBadge(statusLabel, pending = transaction.status == TransactionStatus.PENDING_VERIFICATION)
             }
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text("₹${transaction.amountRupees}", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text("₹${formatRupees(transaction.amountRupees)}", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             if (!showStatus) {
                 Text("›", color = TrustIndigo, fontSize = 20.sp)
             }

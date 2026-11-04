@@ -12,6 +12,8 @@ public interface OfflineTransactionRepository extends JpaRepository<OfflineTrans
 
     List<OfflineTransaction> findByUserIdOrderByReceivedAtDesc(String userId);
 
+    List<OfflineTransaction> findAllByOrderByReceivedAtDesc();
+
     List<OfflineTransaction> findByStatus(TransactionStatus status);
 
     /* The dispute arbiter loads receipts by their device-generated id. */

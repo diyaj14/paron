@@ -24,6 +24,7 @@ paypal:
   client-secret: ${PAYPAL_CLIENT_SECRET:${CLIENT_SECRET:}}
   currency: ${PAYPAL_CURRENCY:USD}
   maximum-amount: ${PAYPAL_MAXIMUM_AMOUNT:500.00}
+  wallet-credit-rate: ${PAYPAL_WALLET_CREDIT_RATE:85.00}
 ledger:
   base-url: ${LEDGER_SERVICE_URL:http://localhost:8082}
 cors:

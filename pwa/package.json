@@ -2,6 +2,7 @@
   "name": "paron-customer-pwa",
   "private": true,
   "scripts": {
+    "start": "npx serve -s public -l 3000",
     "check": "node --check public/src/app.js && node --check public/service-worker.js"
   }
 }

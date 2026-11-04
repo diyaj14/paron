@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         appViewModel = ViewModelProvider(this)[OfflinePayViewModel::class.java]
+        handlePaypalIntent(intent)
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         updateConnectivity()
         WindowCompat.setDecorFitsSystemWindows(window, true)
@@ -54,6 +55,18 @@ class MainActivity : ComponentActivity() {
                 OfflinePayApp(state = state, viewModel = appViewModel)
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handlePaypalIntent(intent)
+    }
+
+    private fun handlePaypalIntent(intent: android.content.Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "paron") return
+        appViewModel.handlePaypalReturn(uri.getQueryParameter("token"), uri.host == "paypal-cancel")
     }
 
     override fun onStart() {

@@ -16,7 +16,7 @@ enum class TransactionStatus {
 data class WalletTransaction(
     val id: String,
     val merchant: String,
-    val amountRupees: Int,
+    val amountRupees: Double,
     val method: String,
     val dateLabel: String,
     val status: TransactionStatus,
@@ -24,8 +24,22 @@ data class WalletTransaction(
     val signature: String? = null,
     val publicKey: String? = null,
     val transactedAt: String? = null,
-    val deviceId: String? = null
+    val deviceId: String? = null,
+    val merchantId: String? = null
 )
+
+fun formatRupees(amount: Double): String =
+    java.math.BigDecimal.valueOf(amount).stripTrailingZeros().toPlainString()
+
+/** An auditable step emitted by the device or the sync response. */
+data class SyncEvent(
+    val label: String,
+    val detail: String,
+    val occurredAt: String,
+    val severity: RiskSeverity = RiskSeverity.INFO
+)
+
+enum class RiskSeverity { INFO, REVIEW, HIGH }
 
 data class AppUiState(
     val authenticated: Boolean = false,
@@ -43,12 +57,15 @@ data class AppUiState(
     val paymentAmount: String = "100",
     val paymentNote: String = "",
     val paymentMethod: PaymentMethod = PaymentMethod.QR,
+    val showOfflineFallback: Boolean = false,
     val lastTransaction: WalletTransaction? = null,
     val message: String? = null,
     val isSyncing: Boolean = false,
     val isReserving: Boolean = false,
+    val isFunding: Boolean = false,
     val bluetoothListening: Boolean = false,
     val lastQrPayload: String? = null,
+    val syncEvents: List<SyncEvent> = emptyList(),
     val serverBaseUrl: String = "http://10.0.2.2:8080",
     val transactions: List<WalletTransaction> = emptyList()
 )

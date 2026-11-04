@@ -23,7 +23,8 @@ public class PaypalClient {
     }
     public JsonNode createOrder(BigDecimal amount, String currency) {
         String response = client.post().uri("/v2/checkout/orders").headers(this::bearer).contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("intent", "CAPTURE", "purchase_units", new Object[]{Map.of("amount", Map.of("currency_code", currency, "value", amount.setScale(2).toPlainString()))}))
+                .body(Map.of("intent", "CAPTURE", "purchase_units", new Object[]{Map.of("amount", Map.of("currency_code", currency, "value", amount.setScale(2).toPlainString()))},
+                        "application_context", Map.of("return_url", "paron://paypal-return", "cancel_url", "paron://paypal-cancel")))
                 .retrieve().body(String.class);
         return parse(response);
     }

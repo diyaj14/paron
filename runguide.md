@@ -24,7 +24,7 @@ This guide walks you through demonstrating **100% offline peer-to-peer payments*
                    |                [ WHEN CONNECTIVITY RETURNS ]                 |
                    +------------------------------+-------------------------------+
                                                   |
-                                                  v  (HTTP POST /api/v1/sync/transactions)
+                                                  v  (HTTP POST /api/v1/sync/{userId})
                                    +------------------------------+
                                    |     Spring Boot Backend      |
                                    | • API Gateway   (:8080)      |
@@ -39,12 +39,12 @@ This guide walks you through demonstrating **100% offline peer-to-peer payments*
 ## ⚡ Quick Prerequisites
 
 1. **Backend Infrastructure & Services Running on Laptop**:
-   Ensure Docker (Kafka + Redis) and your 5 Spring Boot services are running:
+   Ensure Docker (Kafka + Redis) and your 6 Spring Boot services are running:
    ```powershell
    cd "C:\Users\Diya Joshy\paron-1"
    docker compose ps   # Must show healthy for kafka and redis
    ```
-   *(Your 5 Spring Boot services: `api-gateway` on 8080, `token-service` on 8081, `ledger-service` on 8082, `sync-service` on 8083, `fraud-service` on 8084)*.
+   *(Services: `api-gateway` on 8080, `token-service` on 8081, `ledger-service` on 8082, `sync-service` on 8083, `fraud-service` on 8084, and `auth-service` on 8086)*.
 
 2. **Laptop Local Wi-Fi IP**:
    Find your laptop's Wi-Fi IP (your physical phone needs this to sync):
@@ -133,7 +133,7 @@ Now demonstrate what happens when connectivity returns:
 2. In the app on either device, go to the **Wallet** tab.
 3. Tap **Sync Queued Payments Now**.
 4. **Backend Flow in Action**:
-   - The app sends `POST /api/v1/sync/transactions` with the signed payload to your **API Gateway** (`:8080`).
+   - The app sends `POST /api/v1/sync/{userId}` with signed receipts to your **API Gateway** (`:8080`). The gateway routes them to sync-service, which reports `SETTLED` only after ledger settlement completes.
    - **Sync Service** (`:8083`) receives the offline transactions and publishes an event to **Kafka**.
    - **Fraud Service** (`:8084`) evaluates the risk score (offline duration, velocity, amount deviation, token reuse).
    - **Ledger Service** (`:8082`) atomically settles the reserved balance and marks the transaction as **`SETTLED`**.

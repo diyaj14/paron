@@ -3,57 +3,322 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#0a6cff">
+    <meta name="theme-color" content="#0070ba">
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="stylesheet" href="./styles.css">
-    <title>Paron Offline Wallet</title>
+    <title>Paron — PayPal Offline Wallet</title>
   </head>
   <body>
     <main class="shell">
-      <header><span class="logo">P</span><div><h1>Paron</h1><p id="connection-state">Checking connection…</p></div></header>
-      <section class="card wallet"><div><p class="eyebrow">OFFLINE PAYMENT TOKEN</p><strong id="token-amount">No token loaded</strong><p id="token-detail">Connect online to request one.</p></div><span id="token-state" class="chip muted">EMPTY</span></section>
-      <section class="card wallet"><div><p class="eyebrow">ACCOUNT BALANCE</p><strong id="account-total">Connect online to load</strong><p id="account-detail">Your live balance appears after you connect.</p></div></section>
-      <section class="card">
-        <h2>Demo wallet setup</h2>
-        <p class="hint">Use a real token from your API, or enter a demo token for the Bluetooth transfer demonstration.</p>
-        <label>Customer ID <input id="user-id" value="demo-customer"></label>
-        <label>API base URL <input id="api-base" placeholder="https://your-gateway.example"></label>
-        <label>Session access token <input id="session-token" type="password" autocomplete="off" placeholder="Bearer token issued by your auth service"></label>
-        <p class="hint">The access token remains only in this browser tab and is never stored with offline receipts.</p>
-        <div class="two"><label>Demo username <input id="demo-username" value="demo-customer"></label><label>Demo password <input id="demo-password" type="password" autocomplete="current-password"></label></div>
-        <div class="actions"><button id="demo-sign-in" class="secondary">Start demo session</button></div>
-        <div class="two"><label>Token amount (₹) <input id="new-token-amount" type="number" min="1" value="500"></label><label>Expiry (hours) <input id="expiry-hours" type="number" min="1" max="24" value="6"></label></div>
-        <div class="actions"><button id="request-token">Request token online</button><button id="create-demo-token" class="secondary">Create demo token</button></div>
+      <!-- Top Navigation & Role Selector -->
+      <nav class="top-nav">
+        <div class="brand">
+          <span class="logo">P</span>
+          <div>
+            <h1>Paron</h1>
+            <span class="badge">PayPal AI Hackathon</span>
+          </div>
+        </div>
+        <div class="role-tabs">
+          <button id="tab-customer" class="role-tab active" type="button">👤 Customer Wallet</button>
+          <button id="tab-admin" class="role-tab" type="button">🛡️ Admin / Risk Console</button>
+        </div>
+      </nav>
+
+      <!-- Network Status Bar & Interactive Demo Toggle -->
+      <section class="network-bar">
+        <div class="network-status">
+          <span id="network-indicator" class="network-dot"></span>
+          <span id="connection-state">Network: Online (Connected)</span>
+        </div>
+        <button id="demo-network-toggle" class="network-toggle-btn" type="button">
+          ⚡ Toggle Network (Online / Offline)
+        </button>
       </section>
-      <section class="card">
-        <h2>Fund demo wallet with PayPal</h2>
-        <p class="hint">Sandbox payment only. A successful capture credits this demo wallet once; it is not a regulated stored-value balance.</p>
-        <label>Funding API URL <input id="funding-api-base" placeholder="http://localhost:8085"></label>
-        <label>Funding amount (USD) <input id="paypal-funding-amount" type="number" min="1" step="0.01" value="10.00"></label>
-        <div class="actions"><button id="load-paypal" class="secondary">Load PayPal checkout</button></div>
-        <div id="paypal-button-container" class="paypal-buttons"></div>
-        <p id="paypal-status" class="hint">Load checkout while online, then approve using a Sandbox Personal account.</p>
-      </section>
-      <section class="card">
-        <h2>Make an offline payment</h2>
-        <label>Merchant ID <input id="merchant-id" value="merchant-demo-001"></label>
-        <label>Amount (₹) <input id="payment-amount" type="number" min="1" step="0.01" value="125"></label>
-        <label class="toggle"><input id="simulation" type="checkbox" checked> Use simulator (turn off for real merchant phone)</label>
-        <p id="ble-status" class="hint">Simulator ready. No Bluetooth hardware needed.</p>
-        <div class="actions"><button id="connect-merchant" class="secondary">Connect merchant</button><button id="pay" disabled>Pay offline</button></div>
-      </section>
-      <section class="card"><div class="section-title"><h2>Transactions</h2><button id="sync-now" class="secondary small">Sync now</button></div><div id="transactions" class="transactions"><p class="hint">No transactions yet.</p></div></section>
-      <section class="card">
-        <h2>Resolve dispute (AI Judge)</h2>
-        <p class="hint">Two receipts below argue over the same payment. The arbiter re-verifies each signature, checks the token spend state, and hands down a deterministic, auditable verdict.</p>
-        <label>Device txn A <input id="dispute-txn-a" placeholder="device transaction id"></label>
-        <label>Device txn B <input id="dispute-txn-b" placeholder="device transaction id"></label>
-        <div class="actions"><button id="resolve-dispute" class="secondary">Resolve dispute</button></div>
-        <div id="dispute-result" class="dispute-result"></div>
-      </section>
-      <section class="card"><div class="section-title"><h2>Token history</h2></div><div id="token-history" class="transactions"><p class="hint">No tokens issued yet.</p></div></section>
-      <p id="notice" class="notice" aria-live="polite"></p>
+
+      <!-- ================================================================= -->
+      <!-- CUSTOMER WALLET VIEW (FLOWS 1 TO 4)                               -->
+      <!-- ================================================================= -->
+      <div id="customer-view" class="customer-view">
+
+        <!-- 1. Sign In & Wallet Balance (Split Available vs Locked) -->
+        <section class="card wallet-hero">
+          <div class="wallet-balance-row">
+            <div>
+              <p class="eyebrow">PAYPAL-FUNDED WALLET</p>
+              <div class="wallet-total" id="account-total">₹1,000.00</div>
+            </div>
+            <span id="token-state" class="chip active">ACTIVE</span>
+          </div>
+
+          <div class="split-balance-grid">
+            <div class="split-card locked">
+              <div class="label">🔒 LOCKED FOR OFFLINE PAYMENTS</div>
+              <div class="amount" id="locked-offline-amount">₹500.00</div>
+              <div class="caption" id="locked-offline-caption">₹500.00 allowance active on device</div>
+            </div>
+            <div class="split-card">
+              <div class="label">🌐 AVAILABLE ONLINE BALANCE</div>
+              <div class="amount" id="available-online-amount">₹500.00</div>
+              <div class="caption">For PayPal / UPI cloud payments</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Quick Demo Session & Offline Reservation -->
+        <section class="card">
+          <h2>1. Sign in & Fund Offline Allowance</h2>
+          <p class="hint">Prepaid allowance: lock an authorized amount for offline cryptographic payments.</p>
+          <div class="two">
+            <label>Customer ID
+              <input id="user-id" value="demo-customer">
+            </label>
+            <label>API Gateway URL
+              <input id="api-base" value="http://localhost:8080" placeholder="http://localhost:8080">
+            </label>
+          </div>
+          <div class="two">
+            <label>Demo username
+              <input id="demo-username" value="demo-customer">
+            </label>
+            <label>Demo password
+              <input id="demo-password" type="password" value="demo-password" autocomplete="current-password">
+            </label>
+          </div>
+          <input id="session-token" type="hidden">
+          <div class="actions">
+            <button id="demo-sign-in" type="button" class="secondary">Start demo session</button>
+            <button id="quick-fund-wallet" type="button" class="secondary">Top-up ₹1,000 (PayPal)</button>
+          </div>
+
+          <hr style="border:0;border-top:1px solid var(--border);margin:16px 0 12px;">
+
+          <div class="two">
+            <label>Reserve amount (₹)
+              <input id="new-token-amount" type="number" min="1" value="500">
+            </label>
+            <label>Expiry (hours)
+              <input id="expiry-hours" type="number" min="1" max="24" value="6">
+            </label>
+          </div>
+          <div class="actions single">
+            <button id="request-token" type="button" class="accent">
+              🔒 Reserve ₹500 for Offline Use
+            </button>
+          </div>
+        </section>
+
+        <!-- 2. Payment Entry (Online Attempt vs Offline Payment) -->
+        <section class="card">
+          <h2>2 & 3. Make a Payment</h2>
+          <p class="hint">Try paying online while offline to see the intentional fallback to your reserved offline wallet.</p>
+          <div class="actions">
+            <button id="pay-online-attempt" type="button" class="secondary">
+              💳 Pay Online (UPI / Cloud)
+            </button>
+            <button id="scroll-to-offline" type="button">
+              📴 Pay Offline with Allowance
+            </button>
+          </div>
+        </section>
+
+        <!-- 3. Offline Payment Execution Card -->
+        <section id="offline-pay-section" class="card">
+          <h2>3. Offline Payment Execution</h2>
+          <p class="hint">Bounded risk: payments are locally signed with device ECDSA P-256 and verified by merchant.</p>
+          
+          <div style="background:#09172c;border:1px solid var(--border);border-radius:10px;padding:12px;margin:10px 0;">
+            <div style="display:flex;justify-content:space-between;font-size:0.85rem;">
+              <span>Available Offline Allowance:</span>
+              <strong id="offline-allowance-display" style="color:#6ee7b7;">₹500.00</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-top:6px;">
+              <span>Remaining Limit After Payment:</span>
+              <strong id="remaining-limit-display" style="color:#93c5fd;">₹375.00</strong>
+            </div>
+          </div>
+
+          <label>Select or enter Merchant
+            <select id="merchant-picker">
+              <option value="merchant-demo-001">Transit Metro Turnstile (merchant-demo-001)</option>
+              <option value="merchant-cafe-002">Campus Coffee Brew (merchant-cafe-002)</option>
+              <option value="merchant-store-003">QuickMart Outpost (merchant-store-003)</option>
+              <option value="custom">Custom Merchant ID...</option>
+            </select>
+          </label>
+          <input id="merchant-id" value="merchant-demo-001" style="display:none;margin-top:6px;">
+
+          <label>Payment Amount (₹)
+            <input id="payment-amount" type="number" min="1" step="0.01" value="125">
+          </label>
+
+          <label class="toggle" style="margin-top:12px;">
+            <input id="simulation" type="checkbox" checked> Use simulator (turn off for real Android merchant phone)
+          </label>
+          <p id="ble-status" class="hint">Simulator ready. Generates signed cryptographic receipts without BLE hardware.</p>
+
+          <div class="actions">
+            <button id="connect-merchant" type="button" class="secondary">Connect merchant</button>
+            <button id="pay" type="button" class="accent">Authorize & Pay Offline (₹125.00)</button>
+          </div>
+        </section>
+
+        <!-- 4. Reconnect & Synchronize Timeline -->
+        <section class="card">
+          <div class="section-title">
+            <h2>4. Synchronize & Reconcile</h2>
+            <button id="sync-now" type="button" class="small">Sync now</button>
+          </div>
+          <p class="hint">When connectivity returns, offline receipts are uploaded to sync-service, verified, and settled atomically.</p>
+
+          <!-- Live Sync Timeline Animation Card -->
+          <div id="sync-timeline-container" class="sync-timeline-card" style="display:none;">
+            <div style="font-size:0.8rem;font-weight:700;color:#79a8e8;text-transform:uppercase;">Live Settlement Timeline</div>
+            <div class="timeline-steps">
+              <div id="step-upload" class="timeline-step">
+                <div class="timeline-node">1</div>
+                <div class="timeline-step-title">Receipt uploaded</div>
+              </div>
+              <div id="step-sig" class="timeline-step">
+                <div class="timeline-node">2</div>
+                <div class="timeline-step-title">Signature verified</div>
+              </div>
+              <div id="step-cap" class="timeline-step">
+                <div class="timeline-node">3</div>
+                <div class="timeline-step-title">Allowance checked</div>
+              </div>
+              <div id="step-settle" class="timeline-step">
+                <div class="timeline-node">4</div>
+                <div class="timeline-step-title">Ledger settled</div>
+              </div>
+            </div>
+            <p id="sync-timeline-status" class="hint" style="text-align:center;margin:6px 0 0;">Synchronizing with ledger...</p>
+          </div>
+
+          <div id="transactions" class="transactions">
+            <p class="hint">No transactions yet.</p>
+          </div>
+        </section>
+
+        <!-- Optional PayPal Checkout Details (Collapsible) -->
+        <details class="card" style="cursor:pointer;">
+          <summary style="font-weight:700;font-size:0.95rem;color:#79a8e8;">PayPal Sandbox Integration Config</summary>
+          <div style="margin-top:12px;">
+            <label>Funding API URL <input id="funding-api-base" placeholder="http://localhost:8085"></label>
+            <label>Funding amount (USD) <input id="paypal-funding-amount" type="number" min="1" step="0.01" value="10.00"></label>
+            <div class="actions"><button id="load-paypal" class="secondary" type="button">Load PayPal checkout</button></div>
+            <div id="paypal-button-container" class="paypal-buttons"></div>
+            <p id="paypal-status" class="hint">Load checkout while online, then approve using a Sandbox Personal account.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- ADMIN / RISK CONSOLE VIEW (FLOW 5)                                -->
+      <!-- ================================================================= -->
+      <div id="admin-view" class="admin-view">
+
+        <!-- Axiom Banner -->
+        <div class="security-axiom-banner">
+          <strong>Paron Security Model:</strong> Paron does not pretend offline payments are risk-free. It limits risk through a prepaid allowance, cryptographically signed receipts, one-time token claims, duplicate protection, and post-reconnection reconciliation. AI detects suspicious behavior after synchronization, but cannot retroactively stop goods already handed over offline.
+        </div>
+
+        <!-- Admin Controls & Double-Spend Showcase -->
+        <section class="card">
+          <div class="section-title">
+            <h2>🛡️ Admin / Risk Console</h2>
+            <span class="chip active">Protected Role: ADMIN_RISK</span>
+          </div>
+          <p class="hint">Operator view for real-time risk assessment, deterministic rule gating, and dispute adjudication.</p>
+
+          <div style="background:#091a33;border:1px solid #285494;border-radius:12px;padding:14px;margin:14px 0;">
+            <h3 style="color:#93c5fd;margin:0 0 4px;">Demo Moment: Double-Spend Collision Attack</h3>
+            <p class="hint" style="margin-bottom:12px;">Submit two distinct offline transactions (₹500 to Merchant A and ₹500 to Merchant B) claiming the same ₹500 allowance. The engine settles the first valid one and flags/rejects the conflicting one.</p>
+            <button id="btn-demo-double-spend" type="button" class="danger" style="width:100%;">
+              ⚡ Simulate Double-Spend Collision Attack
+            </button>
+          </div>
+
+          <div class="actions">
+            <button id="admin-refresh-stream" type="button" class="secondary">
+              🔄 Refresh Arriving Transactions
+            </button>
+            <button id="admin-switch-back" type="button" class="secondary">
+              👤 Return to Customer View
+            </button>
+          </div>
+        </section>
+
+        <!-- Arriving Transactions Stream with Deterministic + AI Explanations -->
+        <section class="card">
+          <h2>Arriving Synchronized Transactions</h2>
+          <p class="hint">Deterministic checks run first before settlement; AI risk scoring flags suspicious patterns for review.</p>
+          
+          <div id="admin-transactions-stream" class="transactions">
+            <p class="hint">No transactions received yet.</p>
+          </div>
+        </section>
+
+        <!-- AI Judge / Dispute Adjudication Portal -->
+        <section class="card">
+          <h2>AI Judge Dispute Adjudication</h2>
+          <p class="hint">Deterministic ruling + cryptographically audited evidence checks + advisory AI explanation.</p>
+          <label>Device txn A <input id="dispute-txn-a" placeholder="device transaction id"></label>
+          <label>Device txn B <input id="dispute-txn-b" placeholder="device transaction id"></label>
+          <div class="actions"><button id="resolve-dispute" class="secondary" type="button">Resolve dispute</button></div>
+          <div id="dispute-result" class="dispute-result"></div>
+        </section>
+      </div>
+
+      <!-- Notice Toast -->
+      <p id="notice" class="notice" aria-live="polite">Ready.</p>
+
+      <!-- ================================================================= -->
+      <!-- MODAL DIALOG: Network Loss Online Attempt Alert                   -->
+      <!-- ================================================================= -->
+      <div id="network-loss-modal" class="modal-backdrop" style="display:none;">
+        <div class="modal-card">
+          <div class="modal-header">
+            <span class="modal-icon">📡</span>
+            <h3 class="modal-title">Connectivity Required</h3>
+          </div>
+          <div class="modal-body">
+            Online payment requires connectivity. Use your reserved offline balance?
+            <div class="modal-highlight">
+              🔒 You have <strong>₹500.00</strong> reserved and cryptographically secured on this device for offline payments.
+            </div>
+          </div>
+          <div class="actions">
+            <button id="modal-cancel-btn" type="button" class="secondary">Cancel</button>
+            <button id="modal-pay-offline-btn" type="button" class="accent">Pay Offline with Reserved Balance</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- MODAL DIALOG: Admin Authentication Gate                           -->
+      <!-- ================================================================= -->
+      <div id="admin-auth-modal" class="modal-backdrop" style="display:none;">
+        <div class="modal-card">
+          <div class="modal-header">
+            <span class="modal-icon">🛡️</span>
+            <h3 class="modal-title">Admin / Risk Console Access</h3>
+          </div>
+          <div class="modal-body">
+            This protected console is restricted to Risk Operators and Fraud Analysts.
+            <label style="margin-top:10px;">Operator Passcode
+              <input id="admin-passcode" type="password" value="admin" placeholder="admin">
+            </label>
+          </div>
+          <div class="actions">
+            <button id="modal-admin-cancel" type="button" class="secondary">Cancel</button>
+            <button id="modal-admin-unlock" type="button" class="accent">Unlock Console</button>
+          </div>
+        </div>
+      </div>
+
     </main>
+
     <script src="./src/app.js"></script>
   </body>
 </html>

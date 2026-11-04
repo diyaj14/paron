@@ -1,6 +1,5 @@
 package org.paron.syncservice.service;
 
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.paron.syncservice.dto.OfflineTransactionDto;
@@ -16,15 +15,6 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 
-/*here we defince sync rules max no of transactions
-that ca be made by single device during a sync,
-each transaction is published indivdually
-if a failure happens in one transaction, it doesnt effect
-the entire batch
- */
-/* the device can retry just FAILED one
-              on the next sync.-ENSURE THIS HAS BEEN IMPLEMENTED
-*/
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -64,9 +54,6 @@ public class SyncService {
                 log.debug("Published to Kafka. deviceTransactionId={}, userId={}",
                         txn.getDeviceTransactionId(), userId);
             } catch (Exception e) {
-                // One Kafka publish failure should not abort the whole batch.
-                // Log it and continue — the device can retry just this one
-                // on the next sync.
                 log.error("Failed to publish transaction to Kafka. deviceTransactionId={}",
                         txn.getDeviceTransactionId(), e);
                 failedIds.add(txn.getDeviceTransactionId());
@@ -86,18 +73,14 @@ public class SyncService {
                 .acceptedDeviceTransactionIds(acceptedIds)
                 .build();
     }
-        /*
-         * Returns the full transaction history for a user — every status
-         * (RECEIVED, PROCESSING, SETTLED, REJECTED, FAILED) — ordered
-         * newest first.
-         *
-         * Used by the mobile app to show a "sync history" screen so the
-         * user can see which offline payments went through, which are still
-         * pending, and which were rejected with a reason.
-         */
-        public List<OfflineTransaction> getStatusForUser(String userId) {
-            log.debug("Fetching transaction history for userId={}", userId);
-            return transactionRepository.findByUserIdOrderByReceivedAtDesc(userId);
-        }
-}
 
+    public List<OfflineTransaction> getStatusForUser(String userId) {
+        log.debug("Fetching transaction history for userId={}", userId);
+        return transactionRepository.findByUserIdOrderByReceivedAtDesc(userId);
+    }
+
+    public List<OfflineTransaction> getAllTransactions() {
+        log.debug("Fetching all sync transactions for admin risk audit");
+        return transactionRepository.findAllByOrderByReceivedAtDesc();
+    }
+}

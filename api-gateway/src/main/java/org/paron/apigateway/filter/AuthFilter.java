@@ -101,7 +101,8 @@ public class AuthFilter implements GlobalFilter, Ordered {
         String path = exchange.getRequest().getPath().value();
         return path.startsWith("/actuator/")
                 || path.endsWith("/ping")
-                || path.startsWith("/api/v1/auth/");
+                || path.equals("/api/v1/auth/otp/verify")
+                || path.equals("/api/v1/auth/demo/session");
     }
 
     private Mono<Void> error(ServerWebExchange exchange, HttpStatus status, String message) {

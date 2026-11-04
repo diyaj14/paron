@@ -10,11 +10,13 @@ $javaHome = Get-ChildItem "C:\Program Files\Java" -Directory -ErrorAction Silent
 if ($javaHome) { $env:JAVA_HOME = $javaHome }
 
 $services = @(
-    @{ Name = "api-gateway"; Port = 8080; Jar = "api-gateway\target\api-gateway-1.0.jar" },
+    @{ Name = "api-gateway"; Port = 8080; Jar = "api-gateway\target\api-gateway-1.0-boot.jar" },
+    @{ Name = "auth-service"; Port = 8086; Jar = "auth-service\target\auth-service-1.0-boot.jar" },
     @{ Name = "token-service"; Port = 8081; Jar = "token-service\target\token-service-1.0.jar" },
     @{ Name = "ledger-service"; Port = 8082; Jar = "ledger-service\target\ledger-service-1.0.jar" },
     @{ Name = "sync-service"; Port = 8083; Jar = "sync-service\target\sync-service-1.0.jar" },
-    @{ Name = "fraud-service"; Port = 8084; Jar = "fraud-service\target\fraud-service-1.0.jar" }
+    @{ Name = "fraud-service"; Port = 8084; Jar = "fraud-service\target\fraud-service-1.0.jar" },
+    @{ Name = "paypal-funding-service"; Port = 8085; Jar = "paypal-funding-service\target\paypal-funding-service-1.0.jar" }
 )
 
 foreach ($svc in $services) {

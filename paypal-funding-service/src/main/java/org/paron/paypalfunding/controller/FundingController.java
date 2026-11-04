@@ -24,12 +24,12 @@ public class FundingController {
     }
 
     @PostMapping("/paypal/orders/{orderId}/capture") 
-    public FundingResponse capture(@PathVariable String orderId) { 
-        return funding.capture(orderId); 
+    public FundingResponse capture(@RequestHeader("X-User-Id") String authenticatedUserId, @PathVariable String orderId) {
+        return funding.capture(authenticatedUserId, orderId);
     }
 
     @GetMapping("/{fundingId}") 
-    public FundingResponse status(@PathVariable UUID fundingId) { 
-        return funding.find(fundingId); 
+    public FundingResponse status(@RequestHeader("X-User-Id") String authenticatedUserId, @PathVariable UUID fundingId) {
+        return funding.find(authenticatedUserId, fundingId);
     }
 }

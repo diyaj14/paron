@@ -32,6 +32,18 @@ public class TokenController {
         return ResponseEntity.status(HttpStatus.CREATED).body(tokenResponse);
     }
 
+    /** Recover the authenticated user's active token on the same device. */
+    @GetMapping("/active")
+    public ResponseEntity<TokenResponse> getActiveToken(
+            @RequestHeader("X-User-Id") String authenticatedUserId,
+            @RequestParam String deviceId) {
+        var activeToken = tokenService.getActiveToken(authenticatedUserId, deviceId);
+        if (activeToken.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(activeToken.get());
+    }
+
     /*Validate token before transaction (GET alias, kept for compatibility)*/
     @GetMapping("/validateToken")
     public ResponseEntity<ValidateTokenResponse> validate(@Valid @RequestBody ValidateTokenRequest request){

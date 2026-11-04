@@ -51,3 +51,5 @@ local.properties
 session-*.pem
 *.pem
 
+.gradle-user
+.m2-user

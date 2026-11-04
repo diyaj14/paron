@@ -30,6 +30,9 @@ public class FundingService {
     @Value("${paypal.maximum-amount}") 
     private BigDecimal maximumAmount;
 
+    @Value("${paypal.wallet-credit-rate:85.00}")
+    private BigDecimal walletCreditRate;
+
     @Transactional
     public FundingResponse create(String authenticatedUserId, CreateFundingRequest request) {
         BigDecimal amount = request.amount().setScale(2);
@@ -47,9 +50,10 @@ public class FundingService {
 
     /** Safe to retry: the ledger rejects a second credit for the same funding ID. */
     @Transactional(noRollbackFor = RuntimeException.class)
-    public FundingResponse capture(String paypalOrderId) {
+    public FundingResponse capture(String authenticatedUserId, String paypalOrderId) {
         FundingAttempt attempt = attempts.findByPaypalOrderId(paypalOrderId)
                 .orElseThrow(() -> new EntityNotFoundException("Unknown PayPal order"));
+        if (!attempt.getUserId().equals(authenticatedUserId)) throw new EntityNotFoundException("Unknown PayPal order");
         if (attempt.getStatus() == FundingStatus.CREDITED) return FundingResponse.from(attempt, null);
         // A local timeout does not roll back PayPal. Inspect its authoritative
         // order state first; capture only when it has not already completed.
@@ -65,12 +69,18 @@ public class FundingService {
         }
         attempt.setPaypalCaptureId(required(capture, "id"));
         attempt.setStatus(FundingStatus.CAPTURED);
-        ledger.credit(attempt.getId(), attempt.getUserId(), attempt.getAmount());
+        // PayPal Sandbox charges USD, while Paron's demo ledger is denominated in INR.
+        // Apply the explicitly disclosed demo rate only after PayPal capture is verified.
+        ledger.credit(attempt.getId(), attempt.getUserId(), attempt.getAmount().multiply(walletCreditRate).setScale(2, java.math.RoundingMode.HALF_UP));
         attempt.setStatus(FundingStatus.CREDITED);
         return FundingResponse.from(attempt, null);
     }
     @Transactional(readOnly = true)
-    public FundingResponse find(UUID id) { return FundingResponse.from(attempts.findById(id).orElseThrow(() -> new EntityNotFoundException("Unknown funding ID")), null); }
+    public FundingResponse find(String authenticatedUserId, UUID id) {
+        FundingAttempt attempt = attempts.findById(id).filter(a -> a.getUserId().equals(authenticatedUserId))
+                .orElseThrow(() -> new EntityNotFoundException("Unknown funding ID"));
+        return FundingResponse.from(attempt, null);
+    }
     private static String required(JsonNode node, String field) { String value = node.path(field).asText(); if (value.isBlank()) throw new IllegalStateException("Invalid PayPal response"); return value; }
     private static String approvalUrl(JsonNode response) { for (JsonNode link : response.path("links")) if ("approve".equals(link.path("rel").asText())) return link.path("href").asText(); return null; }
     static class FundingVerificationException extends RuntimeException { FundingVerificationException(String message) { super(message); } }

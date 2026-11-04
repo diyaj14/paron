@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 
@@ -256,6 +257,23 @@ public class TokenService {
                         .status(record.getStatus().name())
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    /** Return the current user's unexpired active token for device recovery. */
+    public Optional<TokenResponse> getActiveToken(String userId, String deviceId) {
+        return tokenRepository.findByUserIdAndStatus(userId, TokenStatus.ACTIVE)
+                .filter(record -> record.getExpiresAt().isAfter(LocalDateTime.now()))
+                .filter(record -> deviceId.equals(record.getDeviceId()))
+                .map(record -> TokenResponse.builder()
+                        .tokenId(record.getId())
+                        .token(record.getTokenValue())
+                        .userId(record.getUserId())
+                        .deviceId(record.getDeviceId())
+                        .maxAmount(record.getMaxAmount())
+                        .issuedAt(record.getCreatedAt())
+                        .expiresAt(record.getExpiresAt())
+                        .status(record.getStatus().name())
+                        .build());
     }
 
     // 5. SCHEDULED EXPIRY JOB

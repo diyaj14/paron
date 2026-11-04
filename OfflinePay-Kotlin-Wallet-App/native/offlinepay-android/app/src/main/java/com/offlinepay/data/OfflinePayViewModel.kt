@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDateTime
@@ -60,9 +61,13 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
         val wasOffline = !_uiState.value.internetAvailable
         _uiState.update { it.copy(internetAvailable = available) }
         // Auto-sync when reconnecting to internet!
-        if (available && wasOffline) {
+        if (available && wasOffline && _uiState.value.authenticated) {
             syncNow()
         }
+    }
+
+    fun dismissOfflineFallback() {
+        _uiState.update { it.copy(showOfflineFallback = false) }
     }
 
     fun setPhoneNumber(value: String) {
@@ -78,16 +83,24 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.update { it.copy(userEmail = value) }
     }
 
-    fun saveUserProfile(name: String, email: String) {
-        val updated = _uiState.value.copy(
-            userName = name.trim(),
-            userEmail = email.trim(),
-            authenticated = true,
-            message = "Welcome, ${name.trim()}!"
-        )
-        _uiState.value = updated
-        persistState(updated)
-        refreshBalancesFromBackend()
+    fun saveUserProfile(name: String, email: String, onSaved: () -> Unit) {
+        val current = _uiState.value
+        viewModelScope.launch {
+            apiClient.saveUserProfile(current.phoneNumber, name.trim(), email.trim()).onSuccess { profile ->
+                val updated = _uiState.value.copy(
+                    userName = profile.name,
+                    userEmail = profile.email,
+                    authenticated = true,
+                    message = "Welcome, ${profile.name}!"
+                )
+                _uiState.value = updated
+                persistState(updated)
+                refreshBalancesFromBackend()
+                onSaved()
+            }.onFailure { error ->
+                _uiState.update { it.copy(message = "Could not save your profile: ${error.message}") }
+            }
+        }
     }
 
     fun verifyOtp(code: String): Boolean {
@@ -111,9 +124,19 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             apiClient.createDemoSession(phoneNumber, code).onSuccess { session ->
-                _uiState.update { it.copy(authenticated = true, message = "Signed in as ${session.userId}.") }
+                _uiState.update {
+                    it.copy(
+                        authenticated = true,
+                        message = "Signed in as ${session.userId}."
+                    )
+                }
                 refreshBalancesFromBackend()
                 onAuthenticated()
+                if (_uiState.value.internetAvailable && _uiState.value.transactions.any {
+                        it.status == TransactionStatus.PENDING_VERIFICATION && it.offlineToken != null
+                    }) {
+                    syncNow()
+                }
             }.onFailure { error ->
                 _uiState.update { it.copy(message = "Sign-in failed: ${error.message}") }
             }
@@ -131,7 +154,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun setPaymentAmount(value: String) {
-        _uiState.update { it.copy(paymentAmount = value.filter { char -> char.isDigit() || char == '.' }.take(8)) }
+        _uiState.update { it.copy(paymentAmount = value.filter(Char::isDigit).take(8)) }
     }
 
     fun setPaymentNote(value: String) {
@@ -163,12 +186,68 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             apiClient.createTestAccount(currentUserId, 1000.0)
             val balanceRes = apiClient.fetchBalance(currentUserId)
             balanceRes.onSuccess { bal ->
-                _uiState.update { current ->
+                val activeTokenResult = apiClient.fetchActiveOfflineToken(currentUserId, getDeviceId())
+                val restoredToken = activeTokenResult.getOrNull()
+                val updated = _uiState.value.let { current ->
+                    val isSameToken = restoredToken != null &&
+                        restoredToken.tokenId == current.activeTokenId && current.activeOfflineToken != null
                     current.copy(
                         onlineBalance = bal.availableBalance.toInt(),
-                        offlineBalance = if (current.activeOfflineToken != null) current.offlineBalance else bal.reservedAmount.toInt()
+                        offlineBalance = when {
+                            restoredToken != null && !isSameToken -> restoredToken.maxAmount.toInt()
+                            restoredToken != null -> current.offlineBalance
+                            activeTokenResult.isSuccess -> bal.reservedAmount.toInt()
+                            current.activeOfflineToken != null -> current.offlineBalance
+                            else -> bal.reservedAmount.toInt()
+                        },
+                        activeOfflineToken = restoredToken?.token
+                            ?: if (activeTokenResult.isSuccess) null else current.activeOfflineToken,
+                        activeTokenId = restoredToken?.tokenId
+                            ?: if (activeTokenResult.isSuccess) null else current.activeTokenId,
+                        tokenExpiresAt = restoredToken?.expiresAt
+                            ?: if (activeTokenResult.isSuccess) null else current.tokenExpiresAt
                     )
                 }
+                _uiState.value = updated
+                persistState(updated)
+            }
+        }
+    }
+
+    fun startPaypalFunding(amount: String, openApproval: (String) -> Unit) {
+        val userId = _uiState.value.phoneNumber
+        val amountUsd = amount.toDoubleOrNull()
+        if (userId.isBlank() || amountUsd == null || amountUsd <= 0.0) {
+            _uiState.update { it.copy(message = "Enter a valid PayPal Sandbox amount and sign in.") }
+            return
+        }
+        _uiState.update { it.copy(isFunding = true, message = "Creating PayPal Sandbox order…") }
+        viewModelScope.launch {
+            apiClient.createPaypalFundingOrder(userId, amountUsd).onSuccess { order ->
+                _uiState.update { it.copy(isFunding = false, message = "Approve the payment in PayPal Sandbox.") }
+                openApproval(order.approvalUrl)
+            }.onFailure { error ->
+                _uiState.update { it.copy(isFunding = false, message = "PayPal funding failed: ${error.message}") }
+            }
+        }
+    }
+
+    fun handlePaypalReturn(orderId: String?, cancelled: Boolean) {
+        if (cancelled) {
+            _uiState.update { it.copy(isFunding = false, message = "PayPal payment cancelled.") }
+            return
+        }
+        if (orderId.isNullOrBlank()) {
+            _uiState.update { it.copy(isFunding = false, message = "PayPal did not return an order ID.") }
+            return
+        }
+        val userId = _uiState.value.phoneNumber
+        _uiState.update { it.copy(isFunding = true, message = "Verifying PayPal payment…") }
+        viewModelScope.launch {
+            apiClient.capturePaypalFundingOrder(userId, orderId).onSuccess { balance ->
+                _uiState.update { it.copy(isFunding = false, onlineBalance = balance.availableBalance.toInt(), message = "PayPal Sandbox payment captured and wallet updated.") }
+            }.onFailure { error ->
+                _uiState.update { it.copy(isFunding = false, message = "PayPal capture failed: ${error.message}") }
             }
         }
     }
@@ -211,11 +290,11 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             )
 
             result.onSuccess { tokenRes ->
-                val newOffline = (state.offlineBalance + amount).toInt()
+                val newOffline = tokenRes.maxAmount.toInt()
                 val reserveTxn = WalletTransaction(
                     id = "res-" + UUID.randomUUID().toString().take(8),
                     merchant = "Bank Ledger Reserve",
-                    amountRupees = amount.toInt(),
+                    amountRupees = amount,
                     method = "Token Allocation",
                     dateLabel = currentFormattedTime(),
                     status = TransactionStatus.COMPLETED
@@ -245,37 +324,73 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * Confirm Online UPI payment.
+     * An online payment is never silently converted into an offline one.  The
+     * user must explicitly accept the fallback after the online attempt fails.
      */
-    fun confirmOnlinePayment() {
+    fun attemptOnlinePayment(): Boolean {
         val current = _uiState.value
         val amount = current.paymentAmount.toDoubleOrNull()
         if (amount == null || amount <= 0) {
             _uiState.update { it.copy(message = "Please enter a valid amount.") }
-            return
+            return false
+        }
+        if (!current.internetAvailable) {
+            val failedAttempt = WalletTransaction(
+                id = "online-unavailable-" + UUID.randomUUID().toString().take(8),
+                merchant = current.selectedMerchant,
+                amountRupees = amount,
+                method = "Online payment",
+                dateLabel = currentFormattedTime(),
+                status = TransactionStatus.FAILED
+            )
+            val updated = current.copy(
+                showOfflineFallback = true,
+                transactions = listOf(failedAttempt) + current.transactions,
+                syncEvents = listOf(
+                    SyncEvent(
+                        "Online payment unavailable",
+                        "No network was available. No online debit was made.",
+                        currentFormattedTime(),
+                        RiskSeverity.INFO
+                    )
+                ) + current.syncEvents,
+                message = "Online payment needs internet. You can choose your reserved offline balance instead."
+            )
+            _uiState.value = updated
+            persistState(updated)
+            return false
         }
         if (amount > current.onlineBalance) {
             _uiState.update { it.copy(message = "Insufficient online balance.") }
-            return
+            return false
         }
 
-        val txn = WalletTransaction(
+        // No UPI/acquirer integration exists in this project. Never claim an
+        // online transfer succeeded or debit the displayed balance locally.
+        val failedAttempt = WalletTransaction(
             id = "upi-" + UUID.randomUUID().toString().take(8),
             merchant = current.selectedMerchant,
-            amountRupees = amount.toInt(),
+            amountRupees = amount,
             method = "UPI Online",
             dateLabel = currentFormattedTime(),
-            status = TransactionStatus.COMPLETED
+            status = TransactionStatus.FAILED
         )
-
         val updated = current.copy(
-            onlineBalance = (current.onlineBalance - amount).toInt(),
-            lastTransaction = txn,
-            transactions = listOf(txn) + current.transactions,
-            message = "Paid ₹${amount.toInt()} to ${current.selectedMerchant} successfully!"
+            showOfflineFallback = true,
+            transactions = listOf(failedAttempt) + current.transactions,
+            syncEvents = listOf(
+                SyncEvent(
+                    "Online UPI unavailable",
+                    "No payment provider is connected. No online debit was made.",
+                    currentFormattedTime(),
+                    RiskSeverity.REVIEW
+                )
+            ) + current.syncEvents,
+            message = "Online UPI is not connected yet. No debit was made; you can use your reserved offline balance instead."
         )
         _uiState.value = updated
         persistState(updated)
+        return false
     }
 
     /**
@@ -331,7 +446,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
         val transaction = WalletTransaction(
             id = txnId,
             merchant = current.selectedMerchant,
-            amountRupees = amount.toInt(),
+            amountRupees = amount,
             method = "Offline Token",
             dateLabel = currentFormattedTime(),
             status = TransactionStatus.PENDING_VERIFICATION,
@@ -339,7 +454,8 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             signature = signature,
             publicKey = publicKey,
             transactedAt = transactedAt,
-            deviceId = deviceId
+            deviceId = deviceId,
+            merchantId = current.merchantId
         )
 
         val updated = current.copy(
@@ -347,6 +463,15 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             lastTransaction = transaction,
             lastQrPayload = payloadObj.toString(),
             transactions = listOf(transaction) + current.transactions,
+            showOfflineFallback = false,
+            syncEvents = listOf(
+                SyncEvent(
+                    "Offline receipt signed",
+                    "${transaction.id} was signed on this device and queued for reconciliation.",
+                    currentFormattedTime(),
+                    RiskSeverity.INFO
+                )
+            ) + current.syncEvents,
             message = "Offline payment saved! Ready to transmit via Bluetooth or QR."
         )
 
@@ -377,15 +502,28 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
 
-        _uiState.update { it.copy(isSyncing = true, message = "Syncing ${pending.size} offline payment(s) to backend...") }
+        _uiState.update {
+            it.copy(
+                isSyncing = true,
+                syncEvents = listOf(
+                    SyncEvent(
+                        "Sync started",
+                        "Uploading ${pending.size} signed offline receipt(s) for server verification.",
+                        currentFormattedTime(),
+                        RiskSeverity.INFO
+                    )
+                ) + it.syncEvents,
+                message = "Syncing ${pending.size} offline payment(s) to backend..."
+            )
+        }
 
         viewModelScope.launch {
             val payloads = pending.map { txn ->
                 SyncTransactionPayload(
                     deviceTransactionId = txn.id,
                     offlineToken = txn.offlineToken!!,
-                    amount = txn.amountRupees.toDouble(),
-                    merchantId = current.merchantId,
+                    amount = txn.amountRupees,
+                    merchantId = txn.merchantId ?: current.merchantId,
                     transactedAt = txn.transactedAt ?: LocalDateTime.now().toString(),
                     deviceId = txn.deviceId ?: getDeviceId(),
                     signature = txn.signature ?: "",
@@ -398,25 +536,95 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
 
             syncRes.onSuccess { res ->
                 val accepted = res.acceptedDeviceTransactionIds.toSet()
-                val updatedList = _uiState.value.transactions.map { txn ->
-                    if (accepted.contains(txn.id) || res.acceptedCount == pending.size) {
-                        txn.copy(status = TransactionStatus.COMPLETED, dateLabel = "Settled on Bank Ledger")
-                    } else {
-                        txn
+                val rejectedIds = pending.map { it.id }.filterNot(accepted::contains).toSet()
+                if (accepted.isEmpty()) {
+                    val failedState = _uiState.value.copy(
+                        isSyncing = false,
+                        transactions = _uiState.value.transactions.map { txn ->
+                            if (txn.id in rejectedIds) txn.copy(status = TransactionStatus.FAILED, dateLabel = "Rejected by sync service") else txn
+                        },
+                        message = "The sync service rejected the queued receipts. Check the receipt details before retrying."
+                    )
+                    _uiState.value = failedState
+                    persistState(failedState)
+                    return@onSuccess
+                }
+
+                val queuedState = _uiState.value.copy(
+                    transactions = _uiState.value.transactions.map { txn ->
+                        if (txn.id in rejectedIds) txn.copy(status = TransactionStatus.FAILED, dateLabel = "Rejected by sync service") else txn
+                    },
+                    syncEvents = listOf(
+                        SyncEvent(
+                            "Receipts queued for settlement",
+                            "${res.acceptedCount} receipt(s) passed signature checks and were queued. The ledger has not confirmed settlement yet.",
+                            currentFormattedTime(),
+                            RiskSeverity.INFO
+                        )
+                    ) + _uiState.value.syncEvents,
+                    message = "${res.acceptedCount} payment(s) queued. Waiting for ledger settlement..."
+                )
+                _uiState.value = queuedState
+                persistState(queuedState)
+
+                // Sync accepts receipts asynchronously. Poll the persisted sync
+                // status instead of telling the user a queued receipt is settled.
+                var settledStatuses = emptyMap<String, String>()
+                var attempts = 0
+                while (attempts < 20) {
+                    delay(2000)
+                    attempts++
+                    val statusResult = apiClient.fetchOfflineTransactionStatuses(userId)
+                    statusResult.onSuccess { statuses ->
+                        settledStatuses = statuses
+                            .filter { it.deviceTransactionId in accepted }
+                            .associate { it.deviceTransactionId to it.status }
+                    }
+                    if (accepted.all { settledStatuses[it] in setOf("SETTLED", "REJECTED", "HELD_FOR_REVIEW") }) {
+                        break
                     }
                 }
 
+                val settledCount = settledStatuses.count { it.value == "SETTLED" }
+                val rejectedCount = settledStatuses.count { it.value == "REJECTED" }
+                val heldCount = settledStatuses.count { it.value == "HELD_FOR_REVIEW" }
+                val pendingCount = accepted.size - settledCount - rejectedCount - heldCount
                 val finalState = _uiState.value.copy(
                     isSyncing = false,
-                    transactions = updatedList,
-                    message = "${res.acceptedCount} payment(s) verified & settled via Sync Service!"
+                    transactions = _uiState.value.transactions.map { txn ->
+                        when (settledStatuses[txn.id]) {
+                            "SETTLED" -> txn.copy(status = TransactionStatus.COMPLETED, dateLabel = "Settled on Bank Ledger")
+                            "REJECTED" -> txn.copy(status = TransactionStatus.FAILED, dateLabel = "Rejected by sync service")
+                            "HELD_FOR_REVIEW" -> txn.copy(dateLabel = "Held for review")
+                            else -> txn
+                        }
+                    },
+                    syncEvents = listOf(
+                        SyncEvent(
+                            "Settlement status checked",
+                            "$settledCount settled, $rejectedCount rejected, $heldCount held for review, $pendingCount still processing.",
+                            currentFormattedTime(),
+                            if (pendingCount == 0 && rejectedCount == 0 && heldCount == 0) RiskSeverity.INFO else RiskSeverity.REVIEW
+                        )
+                    ) + _uiState.value.syncEvents,
+                    message = if (settledCount == accepted.size) {
+                        "${accepted.size} payment(s) settled by the ledger."
+                    } else {
+                        "Sync accepted ${res.acceptedCount}; $settledCount settled, $rejectedCount rejected, $heldCount held for review, $pendingCount still processing."
+                    }
                 )
                 _uiState.value = finalState
                 persistState(finalState)
                 refreshBalancesFromBackend()
             }.onFailure { err ->
                 _uiState.update {
-                    it.copy(isSyncing = false, message = "Sync failed: ${err.message}. Will retry when online.")
+                    it.copy(
+                        isSyncing = false,
+                        syncEvents = listOf(
+                            SyncEvent("Sync retry queued", "The backend did not confirm settlement: ${err.message}", currentFormattedTime(), RiskSeverity.REVIEW)
+                        ) + it.syncEvents,
+                        message = "Sync failed: ${err.message}. Will retry when online."
+                    )
                 }
             }
         }
@@ -455,7 +663,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             val receivedTxn = WalletTransaction(
                 id = txnId,
                 merchant = "Received from $devId",
-                amountRupees = amount.toInt(),
+                amountRupees = amount,
                 method = "Offline QR",
                 dateLabel = currentFormattedTime(),
                 status = TransactionStatus.PENDING_VERIFICATION,
@@ -463,7 +671,8 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                 signature = sig,
                 publicKey = pubKey,
                 transactedAt = transactedAt,
-                deviceId = devId
+                deviceId = devId,
+                merchantId = merchantId
             )
 
             val current = _uiState.value
@@ -502,7 +711,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                     val receivedTxn = WalletTransaction(
                         id = offer.deviceTransactionId,
                         merchant = "Bluetooth • ${offer.merchantId}",
-                        amountRupees = offer.amount.toInt(),
+                        amountRupees = offer.amount,
                         method = "Bluetooth P2P",
                         dateLabel = currentFormattedTime(),
                         status = TransactionStatus.PENDING_VERIFICATION,
@@ -510,7 +719,8 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                         signature = offer.signature,
                         publicKey = offer.publicKey,
                         transactedAt = offer.transactedAt,
-                        deviceId = offer.deviceId
+                        deviceId = offer.deviceId,
+                        merchantId = offer.merchantId
                     )
                     val current = _uiState.value
                     val updated = current.copy(
@@ -581,7 +791,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                 val txn = WalletTransaction(
                     id = txnId,
                     merchant = device.name ?: "Bluetooth Merchant",
-                    amountRupees = amount.toInt(),
+                    amountRupees = amount,
                     method = "Bluetooth P2P",
                     dateLabel = currentFormattedTime(),
                     status = TransactionStatus.PENDING_VERIFICATION,
@@ -589,7 +799,8 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                     signature = signature,
                     publicKey = publicKey,
                     transactedAt = transactedAt,
-                    deviceId = deviceId
+                    deviceId = deviceId,
+                    merchantId = current.merchantId
                 )
 
                 val updated = _uiState.value.copy(
@@ -650,6 +861,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                     put("publicKey", transaction.publicKey ?: "")
                     put("transactedAt", transaction.transactedAt ?: "")
                     put("deviceId", transaction.deviceId ?: "")
+                    put("merchantId", transaction.merchantId ?: "")
                 }
             )
         }
@@ -674,7 +886,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                 WalletTransaction(
                     id = item.optString("id"),
                     merchant = item.optString("merchant"),
-                    amountRupees = item.optInt("amount"),
+                    amountRupees = item.optDouble("amount"),
                     method = item.optString("method"),
                     dateLabel = item.optString("date"),
                     status = runCatching {
@@ -684,7 +896,8 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                     signature = item.optString("signature").ifBlank { null },
                     publicKey = item.optString("publicKey").ifBlank { null },
                     transactedAt = item.optString("transactedAt").ifBlank { null },
-                    deviceId = item.optString("deviceId").ifBlank { null }
+                    deviceId = item.optString("deviceId").ifBlank { null },
+                    merchantId = item.optString("merchantId").ifBlank { null }
                 )
             }
         }.getOrDefault(emptyList())

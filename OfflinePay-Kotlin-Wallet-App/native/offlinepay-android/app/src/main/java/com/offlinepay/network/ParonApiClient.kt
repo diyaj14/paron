@@ -31,6 +31,9 @@ data class SyncResult(
     val message: String
 )
 data class DemoSession(val accessToken: String, val userId: String, val expiresIn: Long)
+data class UserProfile(val userId: String, val name: String, val email: String)
+data class OfflineTransactionStatus(val deviceTransactionId: String, val status: String)
+data class PaypalFundingOrder(val fundingId: String, val paypalOrderId: String, val approvalUrl: String)
 
 data class SyncTransactionPayload(
     val deviceTransactionId: String,
@@ -64,22 +67,14 @@ class ParonApiClient(private val context: Context) {
                 .apply()
         }
 
-    /**
-     * Resolves the target microservice URL:
-     * - Token Service on port 8081
-     * - Ledger Service on port 8082
-     * - Sync Service on port 8083
-     * Extracts host from baseUrl (whether 10.0.2.2, 192.168.x.x, or localhost).
-     */
-    private fun getServiceUrl(port: Int, path: String): String {
-        return baseUrl.trim().removeSuffix("/") + path
-    }
+    /** App requests go through the API gateway; the gateway routes to each service. */
+    private fun gatewayUrl(path: String): String = baseUrl.trim().removeSuffix("/") + path
 
     suspend fun createDemoSession(email: String, password: String): Result<DemoSession> = withContext(Dispatchers.IO) {
         runCatching {
             val response = httpPostRaw(
-                getServiceUrl(8080, "/api/v1/auth/demo/session"),
-                JSONObject().put("username", email).put("password", password).toString(), false
+                gatewayUrl("/api/v1/auth/otp/verify"),
+                JSONObject().put("phoneNumber", email).put("code", password).toString(), false
             )
             val json = JSONObject(response)
             DemoSession(json.getString("accessToken"), json.getString("userId"), json.getLong("expiresIn"))
@@ -87,10 +82,24 @@ class ParonApiClient(private val context: Context) {
         }
     }
 
+    suspend fun saveUserProfile(userId: String, name: String, email: String): Result<UserProfile> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body = JSONObject().put("name", name).put("email", email).toString()
+                val response = httpPost(
+                    gatewayUrl("/api/v1/auth/profile"),
+                    body,
+                    userId
+                )
+                val json = JSONObject(response)
+                UserProfile(json.getString("userId"), json.getString("name"), json.getString("email"))
+            }
+        }
+
     suspend fun createTestAccount(userId: String, initialBalance: Double = 1000.0): Result<AccountBalance> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val url = getServiceUrl(8082, "/api/v1/ledger/accounts/create-test-account")
+                val url = gatewayUrl("/api/v1/ledger/accounts/create-test-account")
                 val body = JSONObject().apply {
                     put("userId", userId)
                     put("initialBalance", initialBalance)
@@ -112,13 +121,44 @@ class ParonApiClient(private val context: Context) {
     suspend fun fetchBalance(userId: String): Result<AccountBalance> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val url = getServiceUrl(8082, "/api/v1/ledger/balance/$userId")
+                val url = gatewayUrl("/api/v1/ledger/balance/$userId")
                 val responseJson = httpGet(url, userId)
                 val obj = JSONObject(responseJson)
                 AccountBalance(
                     availableBalance = obj.optDouble("availableBalance", 0.0),
                     reservedAmount = obj.optDouble("reservedAmount", 0.0),
                     totalBalance = obj.optDouble("totalBalance", 0.0)
+                )
+            }
+        }
+
+    suspend fun createPaypalFundingOrder(userId: String, amountUsd: Double): Result<PaypalFundingOrder> = withContext(Dispatchers.IO) {
+        runCatching {
+            val response = httpPost(gatewayUrl("/api/funding/paypal/orders"), JSONObject().put("amount", amountUsd).toString(), userId)
+            val json = JSONObject(response)
+            PaypalFundingOrder(json.getString("fundingId"), json.getString("paypalOrderId"), json.getString("approvalUrl"))
+        }
+    }
+
+    suspend fun capturePaypalFundingOrder(userId: String, paypalOrderId: String): Result<AccountBalance> = withContext(Dispatchers.IO) {
+        runCatching {
+            httpPost(gatewayUrl("/api/funding/paypal/orders/${java.net.URLEncoder.encode(paypalOrderId, "UTF-8")}/capture"), "{}", userId)
+            fetchBalance(userId).getOrThrow()
+        }
+    }
+
+    suspend fun fetchActiveOfflineToken(userId: String, deviceId: String): Result<OfflineTokenResult?> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val response = httpGetOptional(gatewayUrl("/api/v1/tokens/active?deviceId=$deviceId"), userId)
+                    ?: return@runCatching null
+                val obj = JSONObject(response)
+                OfflineTokenResult(
+                    tokenId = obj.optString("tokenId"),
+                    token = obj.getString("token"),
+                    maxAmount = obj.optDouble("maxAmount", 0.0),
+                    expiresAt = obj.optString("expiresAt"),
+                    status = obj.optString("status", "ACTIVE")
                 )
             }
         }
@@ -132,9 +172,9 @@ class ParonApiClient(private val context: Context) {
         withContext(Dispatchers.IO) {
             runCatching {
                 // Ensure account exists on ledger
-                createTestAccount(userId, 1000.0)
+                createTestAccount(userId, 1000.0).getOrThrow()
 
-                val url = getServiceUrl(8081, "/api/v1/tokens/gettoken")
+                val url = gatewayUrl("/api/v1/tokens/gettoken")
                 val body = JSONObject().apply {
                     put("userId", userId)
                     put("deviceId", deviceId)
@@ -160,7 +200,7 @@ class ParonApiClient(private val context: Context) {
     ): Result<SyncResult> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val url = getServiceUrl(8083, "/api/v1/sync/$userId")
+                val url = gatewayUrl("/api/v1/sync/$userId")
                 val jsonArray = JSONArray()
                 transactions.forEach { txn ->
                     jsonArray.put(JSONObject().apply {
@@ -196,6 +236,21 @@ class ParonApiClient(private val context: Context) {
             }
         }
 
+    suspend fun fetchOfflineTransactionStatuses(userId: String): Result<List<OfflineTransactionStatus>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val response = httpGet(gatewayUrl("/api/v1/sync/$userId"), userId)
+                val array = JSONArray(response)
+                List(array.length()) { index ->
+                    val item = array.getJSONObject(index)
+                    OfflineTransactionStatus(
+                        deviceTransactionId = item.getString("deviceTransactionId"),
+                        status = item.getString("status")
+                    )
+                }
+            }
+        }
+
     private fun httpGet(urlStr: String, userId: String): String {
         val url = URL(urlStr)
         val conn = url.openConnection() as HttpURLConnection
@@ -211,8 +266,27 @@ class ParonApiClient(private val context: Context) {
             return conn.inputStream.bufferedReader().use(BufferedReader::readText)
         } else {
             val error = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: "HTTP $code"
-            throw Exception("API GET error ($code): $error")
+            throw Exception("API GET error ($code): ${readableError(error)}")
         }
+    }
+
+    private fun httpGetOptional(urlStr: String, userId: String): String? {
+        val url = URL(urlStr)
+        val conn = url.openConnection() as HttpURLConnection
+        conn.requestMethod = "GET"
+        conn.connectTimeout = 7000
+        conn.readTimeout = 7000
+        val token = accessToken ?: throw IllegalStateException("Sign in before calling the Paron API")
+        conn.setRequestProperty("Authorization", "Bearer $token")
+        conn.setRequestProperty("Accept", "application/json")
+
+        val code = conn.responseCode
+        if (code == HttpURLConnection.HTTP_NOT_FOUND) return null
+        if (code in 200..299) {
+            return conn.inputStream.bufferedReader().use(BufferedReader::readText)
+        }
+        val error = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: "HTTP $code"
+        throw Exception("API GET error ($code): ${readableError(error)}")
     }
 
     private fun httpPost(urlStr: String, body: String, userId: String): String = httpPostRaw(urlStr, body, true)
@@ -238,7 +312,19 @@ class ParonApiClient(private val context: Context) {
             return conn.inputStream.bufferedReader().use(BufferedReader::readText)
         } else {
             val error = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: "HTTP $code"
-            throw Exception("API POST error ($code): $error")
+            throw Exception("API POST error ($code): ${readableError(error)}")
         }
     }
+
+    private fun readableError(body: String): String = runCatching {
+        val json = JSONObject(body)
+        val message = json.optString("message").takeIf(String::isNotBlank)
+        val code = json.optString("errorCode").takeIf(String::isNotBlank)
+        when {
+            message != null && code != null -> "$message ($code)"
+            message != null -> message
+            code != null -> code
+            else -> body
+        }
+    }.getOrNull()?.takeIf(String::isNotBlank) ?: body
 }

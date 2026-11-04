@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -13,6 +14,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -32,6 +33,7 @@ import com.offlinepay.data.OfflinePayViewModel
 import com.offlinepay.data.WalletTransaction
 import com.offlinepay.ui.screens.HistoryScreen
 import com.offlinepay.ui.screens.HomeScreen
+import com.offlinepay.ui.screens.AdminRiskScreen
 import com.offlinepay.ui.screens.MobilePayScreen
 import com.offlinepay.ui.screens.OfflinePaymentScreen
 import com.offlinepay.ui.screens.OnboardingScreen
@@ -51,18 +53,20 @@ private data class BottomDestination(val route: String, val label: String, val i
 private val bottomDestinations = listOf(
     BottomDestination("home", "Home", Icons.Rounded.Home),
     BottomDestination("wallet", "Wallet", Icons.Rounded.AccountBalanceWallet),
-    BottomDestination("history", "History", Icons.Rounded.History)
+    BottomDestination("history", "History", Icons.Rounded.History),
+    BottomDestination("risk", "Risk", Icons.Rounded.Visibility)
 )
 
 @Composable
 fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
+    val context = LocalContext.current
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     var otp by rememberSaveable { mutableStateOf("") }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val isUserFullyOnboarded = state.authenticated && state.userName.isNotBlank()
-    val showBottomBar = isUserFullyOnboarded && currentRoute in setOf("home", "wallet", "history")
+    val showBottomBar = isUserFullyOnboarded && currentRoute in setOf("home", "wallet", "history", "risk")
 
     LaunchedEffect(state.message) {
         state.message?.let {
@@ -81,7 +85,10 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                             selected = currentRoute == destination.route,
                             onClick = {
                                 navController.navigate(destination.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    // Onboarding is the graph's start destination, but it is
+                                    // removed after login. Keep Home as the authenticated root
+                                    // so selecting Home always returns to the existing screen.
+                                    popUpTo("home") { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -154,9 +161,11 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onEmailChange = viewModel::setUserEmail,
                     onBack = { navController.popBackStack() },
                     onComplete = {
-                        viewModel.saveUserProfile(state.userName, state.userEmail)
-                        navController.navigate("home") {
-                            popUpTo("onboarding") { inclusive = true }
+                        viewModel.saveUserProfile(state.userName, state.userEmail) {
+                            navController.navigate("home") {
+                                popUpTo("onboarding") { inclusive = true }
+                                launchSingleTop = true
+                            }
                         }
                     }
                 )
@@ -164,9 +173,7 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
             composable("home") {
                 HomeScreen(
                     state = state,
-                    onPay = {
-                        navController.navigate(if (state.internetAvailable) "upi" else "offline")
-                    },
+                    onPay = { navController.navigate("upi") },
                     onWallet = { navController.navigate("wallet") },
                     onHistory = { navController.navigate("history") },
                     onOfflinePay = { navController.navigate("offline") },
@@ -223,10 +230,13 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onNoteChange = viewModel::setPaymentNote,
                     onMethodChange = viewModel::setPaymentMethod,
                     onConfirm = {
-                        viewModel.confirmOnlinePayment()
-                        navController.navigate("history")
+                        if (viewModel.attemptOnlinePayment()) navController.navigate("history")
                     },
-                    onOffline = { navController.navigate("offline") }
+                    onOffline = {
+                        viewModel.dismissOfflineFallback()
+                        navController.navigate("offline")
+                    },
+                    onDismissFallback = viewModel::dismissOfflineFallback
                 )
             }
             composable("offline") {
@@ -236,6 +246,7 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onAmountChange = viewModel::setPaymentAmount,
                     onNoteChange = viewModel::setPaymentNote,
                     pairedDevices = viewModel.bluetoothManager.getPairedDevices(),
+                    onGetToken = { navController.navigate("wallet") },
                     onPayQr = {
                         if (viewModel.saveOfflinePayment()) navController.navigate("success")
                     },
@@ -270,6 +281,11 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onSync = viewModel::syncNow,
                     onSetServerUrl = viewModel::setServerBaseUrl,
                     onTransfer = viewModel::refreshBalancesFromBackend,
+                    onPaypalTopUp = { amount -> viewModel.startPaypalFunding(amount) { approvalUrl ->
+                        runCatching {
+                            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(approvalUrl)))
+                        }.onFailure { viewModel.clearMessage() }
+                    } },
                     onHistory = { navController.navigate("history") },
                     onClearHistory = viewModel::clearTransactions,
                     onMerchant = { transaction -> openTransaction(navController, viewModel, transaction) }
@@ -281,6 +297,9 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onClearHistory = viewModel::clearTransactions,
                     onMerchant = { transaction -> openTransaction(navController, viewModel, transaction) }
                 )
+            }
+            composable("risk") {
+                AdminRiskScreen(state = state, onSync = viewModel::syncNow)
             }
         }
     }

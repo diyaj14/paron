@@ -43,6 +43,8 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -73,6 +75,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.offlinepay.data.AppUiState
 import com.offlinepay.data.PaymentMethod
 import com.offlinepay.data.WalletTransaction
+import com.offlinepay.data.formatRupees
 import com.offlinepay.ui.components.BackAction
 import com.offlinepay.ui.components.InfoRow
 import com.offlinepay.ui.components.MerchantRow
@@ -242,7 +245,8 @@ fun PaymentDetailsScreen(
     onNoteChange: (String) -> Unit,
     onMethodChange: (PaymentMethod) -> Unit,
     onConfirm: () -> Unit,
-    onOffline: () -> Unit
+    onOffline: () -> Unit,
+    onDismissFallback: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().background(WealthBeige).verticalScroll(rememberScrollState())) {
         Box(
@@ -293,22 +297,22 @@ fun PaymentDetailsScreen(
                     )
                 )
             }
-            Text("Select Payment Method", color = TrustIndigo, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
-            MethodRow(
-                "Scan QR Code",
-                "Scan merchant QR code to pay.",
-                PaymentMethod.QR,
-                state.paymentMethod,
-                onMethodChange
-            )
-            Spacer(Modifier.height(9.dp))
-            MethodRow(
-                "Enter Mobile Number",
-                "Enter UPI ID or phone number to pay.",
-                PaymentMethod.MOBILE,
-                state.paymentMethod,
-                onMethodChange
-            )
+//            Text("Select Payment Method", color = TrustIndigo, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
+//            MethodRow(
+//                "Scan QR Code",
+//                "Scan merchant QR code to pay.",
+//                PaymentMethod.QR,
+//                state.paymentMethod,
+//                onMethodChange
+//            )
+//            Spacer(Modifier.height(9.dp))
+//            MethodRow(
+//                "Enter Mobile Number",
+//                "Enter UPI ID or phone number to pay.",
+//                PaymentMethod.MOBILE,
+//                state.paymentMethod,
+//                onMethodChange
+//            )
             Text(
                 if (state.internetAvailable) {
                     "Online balance available: ₹${state.onlineBalance}. Tap confirm to complete transfer."
@@ -320,10 +324,10 @@ fun PaymentDetailsScreen(
                 modifier = Modifier.padding(top = 12.dp, bottom = 5.dp)
             )
             PrimaryAction(
-                "Confirm Payment",
+                "Pay online",
                 onConfirm,
                 modifier = Modifier.padding(top = 12.dp),
-                enabled = state.internetAvailable
+                enabled = true
             )
             Text(
                 "No internet? Use offline balance",
@@ -337,6 +341,24 @@ fun PaymentDetailsScreen(
                     .padding(14.dp)
             )
             Spacer(Modifier.height(4.dp))
+        }
+        if (state.showOfflineFallback) {
+            AlertDialog(
+                onDismissRequest = onDismissFallback,
+                title = { Text("You're offline") },
+                text = {
+                    Text(
+                        "No online debit was made. Pay ₹${state.paymentAmount} using your reserved offline allowance instead? The receipt will be signed and queued for sync.",
+                        color = MutedNavy
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = onOffline) { Text("Pay offline") }
+                },
+                dismissButton = {
+                    TextButton(onClick = onDismissFallback) { Text("Cancel") }
+                }
+            )
         }
     }
 }
@@ -376,6 +398,7 @@ fun OfflinePaymentScreen(
     onAmountChange: (String) -> Unit,
     onNoteChange: (String) -> Unit,
     pairedDevices: List<BluetoothDevice>,
+    onGetToken: () -> Unit,
     onPayQr: () -> Unit,
     onPayBluetooth: (BluetoothDevice) -> Unit
 ) {
@@ -399,7 +422,7 @@ fun OfflinePaymentScreen(
                 BackAction(onBack)
                 Text("Offline P2P Payment", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 26.sp, modifier = Modifier.padding(top = 6.dp))
                 Text(
-                    "Pay peer-to-peer with 100% air-gap.\nSelect Bluetooth device pairing or visual QR code.",
+                    "Pay with Bluetooth or QR, even without internet.",
                     color = MutedNavy,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
@@ -453,7 +476,7 @@ fun OfflinePaymentScreen(
                         Icon(Icons.Rounded.AccountBalanceWallet, null, tint = YieldBlue)
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                        Text("Active Offline Token Balance", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(if (state.activeOfflineToken != null) "Active Offline Token Balance" else "Offline Balance", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Text("₹${state.offlineBalance} available to spend", color = MutedNavy, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
                     }
                 }
@@ -465,8 +488,8 @@ fun OfflinePaymentScreen(
                 )
                 if (state.activeOfflineToken == null) {
                     Text(
-                        "⚠️ No active token loaded. Go to Wallet to reserve offline balance from backend.",
-                        color = Color(0xFFC53030),
+                        "No active offline token",
+                        color = MutedNavy,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 8.dp)
                     )
@@ -600,27 +623,24 @@ fun OfflinePaymentScreen(
             } else {
                 // QR Code Mode
                 SectionCard(Modifier.padding(top = 14.dp)) {
-                    Text("Visual Air-Gapped Handover", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("Visual QR Code", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text(
-                        "Generates an offline QR containing ECDSA-signed claim. Payee phone scans directly with camera.",
+                        if (state.activeOfflineToken == null) "Reserve a token to create a payment QR." else "Show this code to the receiver.",
                         color = MutedNavy,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(top = 3.dp, bottom = 12.dp)
                     )
 
                     PrimaryAction(
-                        text = "Generate ₹${state.paymentAmount} Offline QR",
-                        onClick = onPayQr,
-                        enabled = isAmountValid && state.activeOfflineToken != null,
+                        text = if (state.activeOfflineToken == null) "Reserve Offline Token" else "Generate ₹${state.paymentAmount} Offline QR",
+                        onClick = if (state.activeOfflineToken == null) onGetToken else onPayQr,
+                        enabled = state.activeOfflineToken == null || isAmountValid,
                         trailingArrow = true
                     )
                 }
             }
 
-            OfflineNotice(
-                "Each transaction is cryptographically signed using this phone's hardware ECDSA key. When internet returns, Sync Service settles funds on the central bank ledger.",
-                Modifier.padding(top = 14.dp, bottom = 24.dp)
-            )
+            Spacer(Modifier.height(20.dp))
         }
     }
 }
@@ -677,7 +697,7 @@ fun PaymentSavedScreen(
                 }
                 Text("Offline Payment Signed", color = TrustIndigo, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
                 Text(
-                    "₹${transaction.amountRupees} signed with device ECDSA key.",
+                    "₹${formatRupees(transaction.amountRupees)} signed with device ECDSA key.",
                     color = MutedNavy,
                     fontSize = 13.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -730,7 +750,7 @@ fun PaymentSavedScreen(
         SectionCard(Modifier.padding(top = 12.dp)) {
             MerchantRow(transaction.merchant, "Txn: ${transaction.id}")
             Box(Modifier.fillMaxWidth().padding(vertical = 10.dp).height(1.dp).background(LineBlue))
-            InfoRow("Amount Paid", "₹${transaction.amountRupees}", emphasize = true)
+            InfoRow("Amount Paid", "₹${formatRupees(transaction.amountRupees)}", emphasize = true)
             InfoRow("Payment Method", transaction.method)
             InfoRow("Date & Time", transaction.dateLabel)
             InfoRow("Transaction ID", transaction.id)

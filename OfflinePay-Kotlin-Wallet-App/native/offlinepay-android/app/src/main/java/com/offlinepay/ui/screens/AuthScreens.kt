@@ -68,7 +68,7 @@ fun OnboardingScreen(onStart: () -> Unit) {
                         tint = Color.White
                     )
                 }
-                Text("OfflinePay", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(start = 12.dp))
+                Text("Paron", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(start = 12.dp))
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
@@ -117,7 +117,7 @@ fun OnboardingScreen(onStart: () -> Unit) {
 
 @Composable
 fun SignInChoiceScreen(onBack: () -> Unit, onContinue: () -> Unit) {
-    AuthFrame(title = "Welcome to OfflinePay", subtitle = "Sign up or log in with your phone number.", onBack = onBack) {
+    AuthFrame(title = "Welcome to Paron", subtitle = "Sign up or log in with your phone number.", onBack = onBack) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 Modifier.size(82.dp).background(Color(0xFF0E86EE).copy(alpha = .2f), CircleShape),
