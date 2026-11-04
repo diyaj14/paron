@@ -1,0 +1,15 @@
+.git
+.env
+*.pem
+**/target
+**/build
+**/.gradle
+.gradle-user
+.m2-user
+OfflinePay-Kotlin-Wallet-App
+merchant-android
+pwa
+ml
+risk-model-service
+node_modules
+__pycache__

@@ -1,0 +1,16 @@
+# Shared Docker build for Render's seven Java services.
+# Set SERVICE and JAR_FILE on each Render service (see deployment guide).
+FROM maven:3.9.16-eclipse-temurin-26 AS build
+WORKDIR /workspace
+COPY . .
+ARG SERVICE
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw -B -ntp -pl "${SERVICE}" -am -DskipTests package
+
+FROM eclipse-temurin:26-jre
+WORKDIR /app
+ARG SERVICE
+ARG JAR_FILE
+COPY --from=build /workspace/${SERVICE}/target/${JAR_FILE}.jar /app/app.jar
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=70.0"
+EXPOSE 10000
+ENTRYPOINT ["sh", "-c", "exec java -jar /app/app.jar --server.port=${PORT:-10000}"]

@@ -1,233 +1,171 @@
-# Paron — Offline Payments with an AI Risk Manager
+﻿# Paron
 
-**One-line pitch:** Paron lets a customer spend money *while their phone is offline* (airplane mode) using a **reservation-backed JWT**, settles every receipt when the device reconnects, and protects merchants by screening each synchronized transaction with a **defence-only AI risk manager** that only ever says APPROVE / HOLD / REJECT.
+**Offline payments from a native Android wallet, with PayPal Sandbox funding and AI-assisted risk review.**
 
-Built for the **Razorpay AI Buildathon — Track 2 (AI Risk Manager)**. Everything is reproducible with `docker compose up` + a local stack, and the AI layer ships its own **measured precision/recall report** and a **deterministic fraud drill**.
+Paron lets a customer reserve funds while online, receive a capped offline token, and make a signed payment when connectivity is unavailable. When the device reconnects, the backend verifies and evaluates the queued payment before settling it. The Android wallet can also start a PayPal Sandbox top-up; Paron’s backend creates and captures the PayPal order and credits the demo ledger.
 
----
 
-## The problem
+## Mobile app screenshots
 
-When a customer pays but their phone is offline, the merchant accepts the risk of *delayed settlement*: the same token can be replayed, a receipt can be forged, a device can be compromised, or amounts can be doctored after signing. Paron's answer is two-sided:
+Add Android screenshots to docs/screenshots/ and replace each placeholder below with an image. For example: `![Paron wallet](docs/screenshots/wallet.png)`
 
-1. **Bounded exposure by construction** — the money is *reserved* before the customer goes offline, and a capped JWT token is what moves between devices. There is no new money created at the POS.
-2. **AI risk-managed settlement** — every receipt that comes back online is re-validated, signature-checked, scored by a calibrated risk model, and routed through a deterministic three-state decision gate before a single rupee moves.
+| Onboarding | Home |
+|---|---|
+| *Screenshot placeholder — docs/screenshots/onboarding.png* | *Screenshot placeholder — docs/screenshots/home.png* |
 
----
+| Wallet and PayPal Sandbox | Offline payment |
+|---|---|
+| *Screenshot placeholder — docs/screenshots/wallet-paypal.png* | *Screenshot placeholder — docs/screenshots/offline-payment.png* |
 
-## How it works (the demo)
+| Payment history and sync | Risk review |
+|---|---|
+| *Screenshot placeholder — docs/screenshots/history-sync.png* | *Screenshot placeholder — docs/screenshots/risk-review.png* |
 
-```
-PHASE 1 (online)     PHASE 2 (offline, airplane mode + Bluetooth)   PHASE 3 (reconnect)
-─────────────────    ─────────────────────────────────────────────  ───────────────────────────
-customer requests    customer pays merchant:                        device pushes queued
-an offline limit     every payment is SIGNED on-device              receipts to sync-service
-                     with an ECDSA P-256 key, appended to a
-bank RESERVES the    local queue with deviceId + public key         each receipt is
-funds and issues                                                  o  signature re-verified
-a capped JWT token   POS refuses above the displayed limit          o  token spend-state checked
-                                                                   o  fraud score computed
-token stored on                                                    o  rule stack applied
-the device                                                    ────►  APPROVE  → settle once
-                                                                     HOLD     → review, no money moves
-                                                                     REJECT   → never settles
-```
+## What the app does
 
-- Customer app: a **PWA** (offline-capable, signs every transaction).
-- Merchant app: an **Android/BLE** device that shows the collected balance.
-- Phones genuinely work offline (`airplane mode` + Bluetooth) and settle at the café's Wi-Fi.
+- Onboards a customer through the Android app and saves the profile through the backend.
+- Reads the online balance and reserves funds for a capped offline token.
+- Creates signed offline payment receipts on the device.
+- Queues payments without a network connection and submits them to the backend after reconnecting.
+- Verifies receipts and evaluates settlement risk using deterministic fraud rules and a versioned risk model.
+- Starts PayPal Sandbox checkout from the Android wallet; the backend verifies the capture before crediting the demo ledger.
 
----
+The customer-facing experience is the native Android app. PayPal may open its own approval page or app during checkout, then return to Paron. The PWA is not required for the app flow.
 
-## Architecture
+## How a payment moves through Paron
 
 ```mermaid
 flowchart LR
-    subgraph Edge
-        PWA[Customer PWA<br/>signed receipts]
-        AND[Merchant Android<br/>BLE POS]
-    end
-    PWA --> Gateway[API Gateway<br/>auth, rate-limit]
-    AND --> Gateway
-
-    subgraph Core
-        Gateway --> Sync[Sync Service<br/>receives batches, verifies signatures]
-        Sync --> Kafka[(Kafka<br/>offline.transactions)]
-        Kafka --> Batch[Spring Batch<br/>idempotent settlement]
-        Batch --> Token[Token Service<br/>validate token/spend-state]
-        Batch --> Fraud[Fraud Service<br/>risk scoring + rules]
-        Batch --> Ledger[Ledger Service<br/>reserve / settle / release]
-        Sync --> Judge[AI Judge<br/>dispute adjudicator]
-        Judge --> Token
-        Batch --> Merchant[Merchant ledger<br/>collected balance]
-        Ledger --> Merchant
-    end
-
-    subgraph AI
-        Features[(Risk feature builder)]
-        Model[Risk Model Service<br/>calibrated LR, versioned]
-        Features --> Model
-        Model --> Fraud
-    end
-
-    PWA -. gettoken/reservation .-> Ledger
+    App[Paron Android app] --> Gateway[API gateway]
+    Gateway --> Auth[Auth service]
+    Gateway --> Funding[PayPal funding service]
+    Funding --> Ledger[Ledger service]
+    Gateway --> Token[Token service]
+    Token --> Ledger
+    App -->|signed receipt, stored offline| Queue[On-device queue]
+    Queue -->|on reconnect| Sync[Sync service]
+    Sync --> Kafka[(Kafka)]
+    Sync --> Fraud[Fraud service]
+    Fraud --> Model[Risk model service]
+    Sync --> Ledger
 ```
 
-**Key design rules**
-
-- The **ledger is the only component that moves money**. Token validation, the fraud gate and transaction idempotency are independent controls layered *before* it.
-- **Signed receipts** (Step 0): every transaction is signed with a device-held ECDSA P-256 key using a canonical string (`deviceTransactionId␀token␀merchant␀amount␀time␀deviceId`). Sync-service re-verifies it before the receipt is even accepted; the AI Judge can re-verify rows again at dispute time.
-- **Deterministic first, AI second**: a hard rule hit (token reuse, duplicate payload, velocity breach, amount anomaly, temporal impossibility) is a **hard REJECT** — no model score can override it. The model only decides inside the band where no rule fired.
-- **Low-signal never auto-approves**: a brand-new device with zero history is routed to HOLD, not silently approved (this was a real gap the drill found — see *what broke at 2AM*).
-- **Failure closes closed**: model timeout, unknown model version, or any dependency error → `HOLD_FOR_REVIEW`, never `APPROVE`.
-
----
+The ledger is the component that reserves, credits, and settles balances. The risk model provides a score and reason contributions; deterministic rules and backend policy make the settlement decision.
 
 ## Services
 
-| Service | Port | Responsibility |
-|---|---|---|
-| `api-gateway` | 8080 | Single entry point; RS256 user-JWT auth, rate limiting; internal money/fraud endpoints are intentionally **not** public. |
-| `token-service` | 8081 | Issues capped offline tokens against a ledger reservation; cumulative validate; one-time `mark-used`; read-only spend-state endpoint. |
-| `ledger-service` | 8082 | Customer accounts, **reservation/settlement**, merchant accounts & collected balance. |
-| `sync-service` | 8083 | Receives reconnection batches (max 100), verifies ECDSA signatures, idempotent Kafka→Spring Batch settlement, merchant credit, and the **AI Judge** adjudication endpoint. |
-| `fraud-service` | 8084 | Rule stack + calibrated model score → APPROVE / HOLD / REJECT, with a low-signal guard and reviewable alert queue. |
-| `risk-model-service` | 8600 | Versioned calibrated logistic-regression classifier; returns score, confidence, top-3 reason-code contributions. Standalone. |
-| `pwa/` `merchant-android/` | — | The two phones used in the demo. |
+| Service | Purpose |
+|---|---|
+| api-gateway | Android app entry point, session verification, routing, and rate limiting |
+| auth-service | Demo OTP/session and customer profile |
+| token-service | Issues and validates capped offline tokens |
+| ledger-service | Stores balances and handles reservations, credits, and settlement |
+| sync-service | Accepts queued receipts and coordinates settlement after reconnect |
+| fraud-service | Applies fraud rules and uses the risk-model response in settlement review |
+| paypal-funding-service | Creates PayPal Sandbox orders, verifies captures, and credits the demo ledger |
+| risk-model-service | FastAPI service that loads the versioned risk model and returns a risk score |
 
-Infrastructure: **Kafka** + **Redis** via `docker-compose.yml`; **Supabase Postgres** via env vars (`.env.example`).
+Backend data is stored in PostgreSQL (the project is configured for Supabase). Kafka and Redis are used by the local backend stack and can be provided by hosted services for deployment.
 
----
+## Run locally
 
-## Repo layout
+### Prerequisites
+
+- Android Studio with Android SDK 35
+- Docker Compose
+- JDK 26 for the backend
+- Python and pip for the risk-model service
+- Supabase/PostgreSQL, Redis, Kafka, and PayPal Sandbox credentials
+
+### 1. Configure environment
+
+From the repository root, create .env from .env.example and fill in the values for your development environment. Keep .env and private keys out of Git.
+
+```powershell
+Copy-Item .env.example .env
+```
+
+The backend uses the same Supabase database across several services. Some services have schema generation disabled, so use a database initialized with the project’s required tables.
+
+### 2. Start local infrastructure
+
+```powershell
+docker compose up -d
+```
+
+This starts the local Kafka and Redis containers. PostgreSQL is configured separately through .env.
+
+### 3. Start the risk model
+
+In a separate terminal:
+
+```powershell
+Set-Location risk-model-service
+python -m pip install -r requirements.txt
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8600
+```
+
+### 4. Build and start the backend
+
+From the repository root:
+
+```powershell
+.mvnw.cmd -DskipTests package
+.start-services.ps1
+```
+
+start-services.ps1 starts the seven Java services. Keep the risk-model terminal and Docker infrastructure running as well.
+
+### 5. Run the Android app
+
+Open OfflinePay-Kotlin-Wallet-App/native/offlinepay-android in Android Studio, let Gradle sync, and run the app configuration on an emulator or Android phone.
+
+Set the gateway URL in the app:
+
+- Android emulator: http://10.0.2.2:8080
+- Physical phone on the same Wi-Fi: your computer’s LAN IP with port 8080
+- Hosted backend: use the gateway’s HTTPS URL
+
+For more detailed local setup notes, see [run-guide.md](run-guide.md) and the [Android app README](OfflinePay-Kotlin-Wallet-App/native/offlinepay-android/README.md).
+
+## PayPal Sandbox
+
+Create a Sandbox app and buyer account in the [PayPal Developer Dashboard](https://developer.paypal.com/). Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET on the backend only. The server uses PayPal Orders to create the order and verify/capture it after buyer approval.
+
+The demo currently charges in USD and credits the INR test ledger using the configurable PAYPAL_WALLET_CREDIT_RATE (default 85.00). This is a demo conversion rate, not a live exchange rate. Use Sandbox buyer credentials to exercise the checkout.
+
+## AI risk model
+
+The model service loads a versioned calibrated logistic-regression model and returns a score, confidence, and reason contributions. The fraud service combines that result with deterministic rules and a low-signal review guard. If model scoring is unavailable, settlement is held for review rather than approved automatically.
+
+The checked-in evaluation uses synthetic data. Its metrics demonstrate the pipeline on generated scenarios; they are not claims about real-world fraud detection. See the [model evaluation report](docs/reports/phase2-evaluation.md), [scenario data card](docs/scenario-data-card.md), and [fraud drill](ml/fraud_drill.py).
+
+
+**Demo video:** *Add public YouTube link here.*
+
+**Android build:** *Add APK or release link here.*
+
+## Repository map
 
 ```text
-├── api-gateway/            # Spring Cloud Gateway
-├── token-service/          # offline tokens + spend state
-├── ledger-service/         # reservations, settlement, merchant accounts
-├── sync-service/           # receipt intake, signatures, batch settle, AI Judge
-├── fraud-service/          # rules + model gate (3-state decision)
-├── risk-model-service/     # calibrated model API (FastAPI)
-├── ml/                     # synthetic generator + evaluation + fraud drill
-├── pwa/                    # customer offline PWA (Netlify-ready)
-├── merchant-android/       # merchant BLE POS (Android)
-├── docs/                   # SRS, architecture, two-phone demo, reports
-└── docker-compose.yml      # Kafka + Redis
+api-gateway/                 Spring Cloud Gateway
+auth-service/                Demo authentication and profiles
+token-service/               Offline token issuance and validation
+ledger-service/              Balances, reservations, and settlements
+sync-service/                Offline receipt sync and settlement
+fraud-service/               Fraud rules and review policy
+paypal-funding-service/      PayPal Sandbox order and capture
+risk-model-service/          FastAPI risk model
+ml/                          Synthetic data, evaluation, and fraud drill
+merchant-android/            Merchant Android app
+OfflinePay-Kotlin-Wallet-App/native/offlinepay-android/
+                             Customer Paron Android app
+docs/                        Architecture, reports, and demo material
 ```
 
----
+## Documentation
 
-## Run it
-
-```bash
-# 1. Infrastructure
-docker compose up -d                 # Kafka :9092 + Redis :6379
-
-# 2. Secrets (Supabase Postgres etc.)
-Copy .env.example → .env  (and keep set-env.ps1 out of git)
-
-# 3. Model service (the AI layer)
-cd risk-model-service && pip install -r requirements.txt
-uvicorn app.main:app --port 8600
-
-# 4. The five Java services (or via IntelliJ)
-.\mvnw.cmd -pl api-gateway,token-service,ledger-service,sync-service,fraud-service -am compile
-
-# 5. The two phones
-#    PWA:         cd pwa && npm run dev (Netlify hosts it with HTTPS)
-#    Merchant:    open merchant-android/ in Android Studio → build to the Android phone
-
-# 6. End-to-end manual test collection
-See testing-guide.http  (Step 0 → 12 happy path, N1 → N7 negative paths)
-```
-
-Demo settings: ₹5,000 token cap, ₹1,000 individual payment cap, 6-hour expiry, 10% guarantee reserve — all configurable.
-
----
-
-## The AI Risk Manager (Track 2)
-
-### Measured, not vibes
-
-The model is a **calibrated logistic regression** on a v1 feature schema (amount deviation, per-device/user velocity in 5m/1h/24h windows, token reuse, token age, offline duration, merchant aggregate, hour/day patterns, freshness indicators). It is evaluated on a **held-out synthetic set** with a full evidence bundle:
-
-| Metric | AI model | Rules baseline | Difference |
-|---|---|---|---|
-| Precision | 0.817 | 0.000 | -- |
-| Recall | 0.786 | 0.000 | -- |
-| F1 | 0.801 | 0.000 | -- |
-| **PR-AUC** | **0.911** | **0.146** | **+0.765** |
-| **FP cost (INR 500/FP)** | **INR 46,500** | **INR 0** | **INR -46,500** |
-
-The isolated classifier is a sanity check; **what matters operationally is the 3-state decision** (APPROVE / HOLD / REJECT) made by the deterministic gate, model and low-signal guard. On the held-out scenario set, **98.8% of simulated fraud transactions are never auto-approved** (rejected or held for review), while 73.8% of legitimate payments flow through to APPROVE. These are synthetic-scenario results, not real-world fraud claims.
-
-| Outcome | Value |
-|---|---|
-| Fraud caught (REJECT or HOLD, never APPROVED) | **0.988** |
-| Fraud slips through (APPROVED) | 0.012 |
-| Legit APPROVED | 0.738 |
-| Legit held for review (false-hold) | 0.255 |
-| Legit hard-rejected (false-reject) | 0.007 |
-
-Evidence: `docs/reports/phase2-evaluation.md` · `ml/artifacts/scenario-v2/evaluation-evidence.json` · dataset card: `docs/scenario-data-card.md` · regenerate with:
-
-```bash
-python ml/generate_synthetic.py --seed 42 --n 12000 --out-dir ml/data/scenario-v2
-python ml/train.py --data ml/data/scenario-v2/features.csv --out-dir ml/artifacts/scenario-v2
-python ml/generate_synthetic.py --seed 99 --n 4000 --out-dir ml/data/scenario-v2-holdout
-python ml/evaluate.py --model ml/artifacts/scenario-v2/model.joblib --holdout ml/data/scenario-v2-holdout/features.csv --out-dir ml/artifacts/scenario-v2
-```
-
-### The AI Judge (dispute arbiter)
-
-When two receipts contradict each other (merchant claims ₹200, customer's device says it already paid; a token spent from two devices), `POST /api/v1/sync/adjudicate` arbitrates: it re-verifies each signature, checks settlement status, pulls the token's authoritative spend-state, then applies a **deterministic rule tree** — `FORGED_RECEIPT`, `DOUBLE_SPEND`, `SINGLE_PAYMENT`, `MULTIPLE_LEGITIMATE`, `INSUFFICIENT_EVIDENCE` — and returns an auditable judgement card (per-check evidence + confidence). The LLM, if configured, may only write the human-readable summary; **it never decides the ruling.**
-
-### The fraud drill
-
-A deterministic replay of eight attack scenarios through the exact production decision path:
-
-```bash
-cd ml && python fraud_drill.py
-#  8/8 PASSED — replay token, oversized/tampered amount, unregistered device,
-#               duplicate payload, velocity spike, long-offline, normal payment
-```
-
-Every scenario is deterministic: the same input always yields the same APPROVE/HOLD/REJECT, loud attacks never slip past the rules, and subtle ones are held for review.
-
----
-
-## What broke at 2 AM (and how it got fixed)
-
-Honest failure log — every story below is real, found by running the system, and has a regression test now:
-
-1. **The double-settle bug.** The fraud service's async consume path called `/check` twice per transaction — once by sync-service (gating settlement) and once by a now-deleted Kafka consumer that only wrote no-op alerts nobody read. Two "scores" per receipt, and the decision lived in two places. **Fixed:** single decision path in `FraudController.check`, orphaned consumer removed, and the fix is covered by `DisputeAdjudicatorTest` + `FraudScoringServiceTest`.
-2. **Incremental settlement.** `ReservationService` settled a refund's full reservation instead of only the spent delta, so a third of an RS-cap became permanently unreserved. **Fixed:** incremental settle (spent − previous) with release-back, guarded by 3 regression tests.
-3. **The unregistered-device gap.** The fraud drill (which we built to *prove* the AI layer) flagged that a brand-new device with zero history **auto-approved** — the risk model assigned it a low score with full confidence, and nobody stopped it. **Fixed:** a low-signal guard in `FraudScoringService` downgrades any would-be APPROVE on a `history_available=0` device to `HOLD_FOR_REVIEW`, covered by two tests. A brand-new device now never auto-approves.
-4. **Pre-existing test debt.** The single-decision-path and 3-state-decision changes left two stale tests behind (`FraudControllerTest` built the controller with 2 args instead of 3; an orphaned `TransactionFraudConsumerTest` referenced a deleted class). Both were cleaned and the suite is green.
-
-### Test status
-
-- Java unit + integration tests: **green** across token / ledger / sync / fraud (the only red is the pre-existing `*ApplicationTests` Spring-context test, which needs a live Supabase env — this is expected and not a code failure).
-- Fraud drill: **8/8 green**.
-- Measured report: **regenerable, checked-in**.
-
-### Honest limitations
-
-- Labels are synthetic (generator-created fraud patterns), not real chargeback data — numbers are a *demonstration of the pipeline*, not production performance.
-- v1 features have no merchant category or device/account age; threshold needs recalibrating on real data.
-- Human review and policy ownership remain necessary; the AI never moves money on its own.
-
----
-
-## Buildathon evidence checklist
-
-- [x] Public repo with setup instructions, synthetic-only data, architecture diagram
-- [x] Held-out report: precision, recall, PR-AUC, confusion matrix, threshold, sample count, FP rupee cost
-- [x] Deterministic fraud drill with PASS/FAIL evidence
-- [x] Graceful failure: model unavailable → `HOLD_FOR_REVIEW`, no settlement
-- [x] Audit trail: signed receipt → decision event → settlement result (see `docs/architecture.md`)
-- [x] Two-phone offline demo walkthrough in `docs/two-phone-demo.md`
-
----
-
-*Docs: [SRS](docs/SRS.md) · [architecture](docs/architecture.md) · [two-phone demo](docs/two-phone-demo.md) · [phase-2 plan](docs/phase2-implementation-plan.md) · [reports](docs/reports/)*
+- [Local run guide](run-guide.md)
+- [Architecture](docs/architecture.md)
+- [Two-phone demo](docs/two-phone-demo.md)
+- [Risk evaluation](docs/reports/phase2-evaluation.md)
