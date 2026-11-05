@@ -44,7 +44,7 @@ class FundingServiceTest {
             {"id":"ORDER-1","status":"COMPLETED","purchase_units":[{"payments":{"captures":[{"id":"CAPTURE-1","status":"COMPLETED","amount":{"value":"10.00","currency_code":"USD"}}]}}]}
             """));
 
-        var result = service.capture("ORDER-1");
+        var result = service.capture("user-1", "ORDER-1");
 
         assertThat(result.status()).isEqualTo(FundingStatus.CREDITED);
         verify(paypal, never()).capture(anyString());
@@ -56,7 +56,7 @@ class FundingServiceTest {
         FundingAttempt attempt = attempt(FundingStatus.CREDITED);
         when(attempts.findByPaypalOrderId("ORDER-1")).thenReturn(Optional.of(attempt));
 
-        var result = service.capture("ORDER-1");
+        var result = service.capture("user-1", "ORDER-1");
 
         assertThat(result.status()).isEqualTo(FundingStatus.CREDITED);
         verifyNoInteractions(paypal, ledger);
@@ -70,7 +70,7 @@ class FundingServiceTest {
             {"id":"ORDER-1","status":"COMPLETED","purchase_units":[{"payments":{"captures":[{"id":"CAPTURE-1","status":"COMPLETED","amount":{"value":"11.00","currency_code":"USD"}}]}}]}
             """));
 
-        assertThatThrownBy(() -> service.capture("ORDER-1")).isInstanceOf(RuntimeException.class);
+        assertThatThrownBy(() -> service.capture("user-1", "ORDER-1")).isInstanceOf(RuntimeException.class);
 
         assertThat(attempt.getStatus()).isEqualTo(FundingStatus.FAILED);
         verifyNoInteractions(ledger);
