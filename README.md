@@ -165,6 +165,7 @@ docs/                        Architecture, reports, and demo material
 
 ## Documentation
 
+- [Free Render deployment guide](deployguide.md)
 - [Local run guide](run-guide.md)
 - [Architecture](docs/architecture.md)
 - [Two-phone demo](docs/two-phone-demo.md)
