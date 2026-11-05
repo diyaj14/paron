@@ -272,7 +272,7 @@ Use test users and synthetic transactions only. Never use production PayPal cred
 | Symptom | Check |
 |---|---|
 | Docker build cannot find Dockerfile or risk model files | Use Dockerfile Path `risk-model-service/Dockerfile` and Docker Context `.`. The root `.dockerignore` must not exclude `risk-model-service/`. |
-| Build says SERVICE or JAR_FILE is blank | Add both variables on the service before deploying; check exact spelling and table values. |
+| Build says SERVICE or JAR_FILE is blank, or Docker tries to copy `/workspace//target/.jar` | In the Render service's **Environment** settings, add `SERVICE` and `JAR_FILE` from the table (for PayPal funding: `paypal-funding-service` and `paypal-funding-service-1.0`). Choose **Save, rebuild, and deploy**. These non-secret values are also Docker build arguments. |
 | Service starts then exits with code 137 | The Free 512 MB memory limit may be too small for that Java service. Restarting or tuning cannot guarantee it will fit. |
 | App gets 502 or times out after inactivity | A free Render service may be waking up; wait about a minute and retry. A chain of sleeping services can take longer. |
 | Database connection fails | Check the Supabase pooler host, port assumption, username, password, TLS access, and that the existing schema is initialized. |

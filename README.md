@@ -32,6 +32,10 @@ Add Android screenshots to docs/screenshots/ and replace each placeholder below 
 
 The customer-facing experience is the native Android app. PayPal may open its own approval page or app during checkout, then return to Paron. The PWA is not required for the app flow.
 
+## License
+
+Paron's original project code is available under the [MIT License](LICENSE). Third-party libraries, assets, and services remain subject to their respective licenses and terms.
+
 ## How a payment moves through Paron
 
 ```mermaid

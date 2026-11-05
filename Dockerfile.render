@@ -4,7 +4,11 @@ FROM maven:3.9.16-eclipse-temurin-26 AS build
 WORKDIR /workspace
 COPY . .
 ARG SERVICE
+ARG JAR_FILE
+RUN test -n "${SERVICE}" || (echo "Set the SERVICE environment variable in Render (for example: paypal-funding-service)." >&2; exit 1)
+RUN test -n "${JAR_FILE}" || (echo "Set the JAR_FILE environment variable in Render (for example: paypal-funding-service-1.0)." >&2; exit 1)
 RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw -B -ntp -pl "${SERVICE}" -am -DskipTests package
+RUN test -f "/workspace/${SERVICE}/target/${JAR_FILE}.jar" || (echo "Expected jar not found: /workspace/${SERVICE}/target/${JAR_FILE}.jar. Check SERVICE and JAR_FILE." >&2; exit 1)
 
 FROM eclipse-temurin:26-jre
 WORKDIR /app
