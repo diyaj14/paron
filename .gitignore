@@ -53,3 +53,4 @@ session-*.pem
 
 .gradle-user
 .m2-user
+/release-assets/

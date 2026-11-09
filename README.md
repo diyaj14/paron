@@ -32,6 +32,10 @@ Add Android screenshots to docs/screenshots/ and replace each placeholder below 
 
 The customer-facing experience is the native Android app. PayPal may open its own approval page or app during checkout, then return to Paron. The PWA is not required for the app flow.
 
+## Android demo APK
+
+[Download the Paron Android demo APK](https://github.com/diyaj14/paron/releases/download/demo-v0.1.0/Paron-demo.apk). After installing, open **Backend Server Address** in the wallet, enter the deployed Render API gateway URL, and tap **Apply Server URL**. This is a debug/demo build for Android 8.0 (API 26) and newer; it is not a production-signed app.
+
 ## License
 
 Paron's original project code is available under the [MIT License](LICENSE). Third-party libraries, assets, and services remain subject to their respective licenses and terms.
