@@ -124,116 +124,125 @@ Use Render's Environment page to enter variables. Render supports multiline valu
 
 For Docker services, Render makes service environment variables available as Docker build arguments. The shared Dockerfile uses SERVICE and JAR_FILE during its build; set both before the first deploy. See [Render Docker deployments](https://render.com/docs/docker) and [environment variables](https://render.com/docs/configure-environment-variables).
 
-### Database variables
+### Exact environment variables by service
 
-Add these to each Java service that connects to Supabase: auth, token, ledger, sync, fraud, and PayPal funding.
+Add these on each service's **Environment** page before its first deploy. Put `SERVICE` and `JAR_FILE` on the Java services as ordinary environment variables too; Render passes them to the Docker build as build arguments. Values shown as `https://...` should use the actual public URL Render assigned to your service. Do not add variables listed under another service.
 
-| Key | Value |
-|---|---|
-| SUPABASE_HOST | Supabase pooler hostname only, no scheme and no port |
-| SUPABASE_DB | Database name, usually postgres |
-| SUPABASE_USER | Supabase database username |
-| SUPABASE_PASSWORD | Supabase database password |
+#### Risk model (`paron-risk-model`)
 
-Use the existing database containing the required Paron tables. The gateway and risk model do not need these variables.
+- `MODEL_DIR` = `/app/artifacts/approved/lr-calibrated-v1.0.0`
 
-### Authentication and token-signing variables
+Render supplies `PORT` automatically. No database, Redis, or Kafka variables are needed here.
 
-On **auth-service**, set:
+#### Ledger (`paron-ledger`)
 
-| Key | Value |
-|---|---|
-| SESSION_JWT_PRIVATE_KEY | Contents of the matching private key PEM |
-| SESSION_JWT_ISSUER | paron-demo-auth |
-| SESSION_JWT_AUDIENCE | paron-wallet |
-| DEMO_AUTH_USERNAME | demo-customer |
-| DEMO_AUTH_PASSWORD | The demo OTP accepted by the Android sign-in screen; use 123456 only for this demo |
+- `SERVICE` = `ledger-service`
+- `JAR_FILE` = `ledger-service-1.0`
+- `SUPABASE_HOST` = Supabase pooler hostname only, no scheme or port
+- `SUPABASE_DB` = database name, usually `postgres`
+- `SUPABASE_USER` = username shown in the exact Supabase connection string you selected. For the shared transaction pooler on port `6543`, it is typically `postgres.<project-ref>`, not plain `postgres`.
+- `SUPABASE_PASSWORD` = Supabase database password
 
-On **api-gateway**, set:
+#### Token (`paron-token`)
 
-| Key | Value |
-|---|---|
-| JWT_PUBLIC_KEY | Contents of the matching public key PEM |
-| SESSION_JWT_ISSUER | Same value used by auth-service |
-| SESSION_JWT_AUDIENCE | Same value used by auth-service |
+- `SERVICE` = `token-service`
+- `JAR_FILE` = `token-service-1.0`
+- `SUPABASE_HOST`, `SUPABASE_DB`, `SUPABASE_USER`, `SUPABASE_PASSWORD` = same Supabase project values as ledger
+- `OFFLINE_TOKEN_SIGNING_SECRET` = cryptographically random value of at least 64 bytes; `JwtUtil` uses it directly as the HS512 key. On Windows PowerShell, generate one locally with:
 
-On **token-service**, set OFFLINE_TOKEN_SIGNING_SECRET to a long, random secret, and set OFFLINE_TOKEN_ISSUER to paron-offline-token. Do not reuse the session JWT key for offline tokens.
+  ```powershell
+  $bytes = New-Object byte[] 64
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  $rng.GetBytes($bytes)
+  [Convert]::ToBase64String($bytes)
+  $rng.Dispose()
+  ```
 
-If you need a new session key pair, generate it locally and paste the matching PEM contents into the two services. Never commit the private key. The API gateway verifies tokens signed by the auth service, so the keys, issuer, and audience must match.
+  Copy the printed value into Render without sharing it. Keep this value stable; replacing it invalidates offline tokens signed with the previous key.
+- `OFFLINE_TOKEN_ISSUER` = `paron-offline-token`
+- `LEDGER_SERVICE_URL` = `https://paron-ledger.onrender.com`
 
-### Redis variables
+Do not reuse the session JWT key as the offline token signing secret.
 
-Set these on **api-gateway**, **sync-service**, and **fraud-service**:
+#### Auth (`paron-auth`)
 
-| Key | Value |
-|---|---|
-| REDIS_HOST | Redis host only, no https:// prefix |
-| REDIS_PORT | Port supplied by the Redis provider |
-| REDIS_PASSWORD | Redis password/token supplied by the provider |
-| REDIS_SSL | true when the provider requires TLS; otherwise false |
+- `SERVICE` = `auth-service`
+- `JAR_FILE` = `auth-service-1.0-boot`
+- `SUPABASE_HOST`, `SUPABASE_DB`, `SUPABASE_USER`, `SUPABASE_PASSWORD` = same Supabase project values as ledger
+- `SESSION_JWT_PRIVATE_KEY` = contents of the session private key PEM
+- `SESSION_JWT_ISSUER` = `paron-demo-auth`
+- `SESSION_JWT_AUDIENCE` = `paron-wallet`
+- `DEMO_AUTH_USERNAME` = `demo-customer`
+- `DEMO_AUTH_PASSWORD` = demo OTP accepted by the Android sign-in screen (use `123456` only for this demo)
+- `DEMO_AUTH_TOKEN_TTL_MINUTES` = `30` (optional; this is the default)
 
-Do not create a Render Private Service for Redis. Use an existing free Redis-compatible provider if available. Confirm that its free tier is still enabled and within quota.
+#### Fraud (`paron-fraud`)
 
-### Kafka variables
+- `SERVICE` = `fraud-service`
+- `JAR_FILE` = `fraud-service-1.0`
+- `SUPABASE_HOST`, `SUPABASE_DB`, `SUPABASE_USER`, `SUPABASE_PASSWORD` = same Supabase project values as ledger
+- `REDIS_HOST` = Redis hostname only
+- `REDIS_PORT` = Redis port
+- `REDIS_PASSWORD` = Redis password/token
+- `REDIS_SSL` = `true` when the Redis provider requires TLS
+- `MODEL_SERVICE_URL` = `https://paron-risk-model.onrender.com`
 
-Set these on **sync-service**:
+#### Sync (`paron-sync`)
 
-| Key | Value |
-|---|---|
-| KAFKA_BOOTSTRAP_SERVERS | Kafka bootstrap hostname and port from the provider |
-| KAFKA_SASL_MECHANISM | The provider's SASL mechanism |
-| KAFKA_SECURITY_PROTOCOL | The provider's required protocol, such as SASL_SSL or SASL_PLAINTEXT |
-| KAFKA_JAAS_CONFIG | Provider's Kafka JAAS configuration |
+- `SERVICE` = `sync-service`
+- `JAR_FILE` = `sync-service-1.0`
+- `SUPABASE_HOST`, `SUPABASE_DB`, `SUPABASE_USER`, `SUPABASE_PASSWORD` = same Supabase project values as ledger
+- `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_SSL` = Redis provider host, port, password/token, and TLS setting
+- `KAFKA_BOOTSTRAP_SERVERS` = Kafka bootstrap hostname and port
+- `KAFKA_SASL_MECHANISM` = mechanism specified by the Kafka provider
+- `KAFKA_SECURITY_PROTOCOL` = provider protocol, typically `SASL_SSL`
+- `KAFKA_JAAS_CONFIG` = full JAAS login configuration using the Kafka username and password
+- `LEDGER_SERVICE_URL` = `https://paron-ledger.onrender.com`
+- `TOKEN_SERVICE_URL` = `https://paron-token.onrender.com`
+- `FRAUD_SERVICE_URL` = `https://paron-fraud.onrender.com`
 
-Copy the current values from the Kafka provider dashboard. The example values in .env.example are placeholders, not guaranteed to match every provider's current connection settings. Keep the Kafka topic name as the service default, offline.transactions.
+The Kafka topic is `offline.transactions`. Use the exact connection mechanism and values shown in the Kafka provider dashboard.
 
-### Service-to-service URLs
+For **Aiven SASL/SCRAM**, use the SASL bootstrap port from Aiven's connection information (SASL and client-certificate authentication can use different ports). Set `KAFKA_SECURITY_PROTOCOL=SASL_SSL`, `KAFKA_SASL_MECHANISM=SCRAM-SHA-256`, and `KAFKA_JAAS_CONFIG` to `org.apache.kafka.common.security.scram.ScramLoginModule required username="<AIVEN_SERVICE_USER>" password="<AIVEN_SERVICE_PASSWORD>";`. In Aiven Quick Connect, download the **CA certificate** for SASL. In the Render sync-service Environment page, add it under **Secret Files** with filename `aiven-ca.pem`, then add:
 
-All these URLs use HTTPS public Render URLs because this guide uses free Web Services. Use the actual service URLs from Render if the names differ.
+- `SPRING_KAFKA_SSL_TRUST_STORE_LOCATION` = `file:/etc/secrets/aiven-ca.pem`
+- `SPRING_KAFKA_SSL_TRUST_STORE_TYPE` = `PEM`
 
-On **token-service**:
+Do not use Aiven's service certificate or private key for SASL/SCRAM. Render mounts secret files at `/etc/secrets/<filename>`; Kafka supports PEM trust stores. Keep the CA file out of Git.
 
-- LEDGER_SERVICE_URL = https://paron-ledger.onrender.com
+#### PayPal funding (`paron-paypal-funding`)
 
-On **fraud-service**:
+- `SERVICE` = `paypal-funding-service`
+- `JAR_FILE` = `paypal-funding-service-1.0`
+- `SUPABASE_HOST`, `SUPABASE_DB`, `SUPABASE_USER`, `SUPABASE_PASSWORD` = same Supabase project values as ledger
+- `LEDGER_SERVICE_URL` = `https://paron-ledger.onrender.com`
+- `PAYPAL_CLIENT_ID` = Client ID from a PayPal Developer Sandbox app
+- `PAYPAL_CLIENT_SECRET` = Sandbox secret from the same app
+- `PAYPAL_BASE_URL` = `https://api-m.sandbox.paypal.com`
+- `PAYPAL_CURRENCY` = `USD`
+- `PAYPAL_MAXIMUM_AMOUNT` = `500.00`
+- `PAYPAL_WALLET_CREDIT_RATE` = `85.00` demo INR credit per USD
 
-- MODEL_SERVICE_URL = https://paron-risk-model.onrender.com
+Never put the PayPal secret in the Android app or public repository. The conversion rate is a demo ledger rate, not an exchange-rate quote. Use a Sandbox buyer account to approve checkout.
 
-On **sync-service**:
+#### API gateway (`paron-api`)
 
-- LEDGER_SERVICE_URL = https://paron-ledger.onrender.com
-- TOKEN_SERVICE_URL = https://paron-token.onrender.com
-- FRAUD_SERVICE_URL = https://paron-fraud.onrender.com
+- `SERVICE` = `api-gateway`
+- `JAR_FILE` = `api-gateway-1.0-boot`
+- `AUTH_SERVICE_URL` = `https://paron-auth.onrender.com`
+- `TOKEN_SERVICE_URL` = `https://paron-token.onrender.com`
+- `LEDGER_SERVICE_URL` = `https://paron-ledger.onrender.com`
+- `SYNC_SERVICE_URL` = `https://paron-sync.onrender.com`
+- `FRAUD_SERVICE_URL` = `https://paron-fraud.onrender.com`
+- `PAYPAL_FUNDING_SERVICE_URL` = `https://paron-paypal-funding.onrender.com`
+- `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_SSL` = Redis provider host, port, password/token, and TLS setting
+- `JWT_PUBLIC_KEY` = contents of the matching session public key PEM
+- `SESSION_JWT_ISSUER` = same value as auth service (`paron-demo-auth`)
+- `SESSION_JWT_AUDIENCE` = same value as auth service (`paron-wallet`)
 
-On **paypal-funding-service**:
+The gateway and risk model do not need Supabase variables. If you generate a new session key pair, paste the matching PEM files into auth and gateway; never commit the private key. The Android app should call only the gateway URL.
 
-- LEDGER_SERVICE_URL = https://paron-ledger.onrender.com
-
-On **api-gateway**:
-
-- AUTH_SERVICE_URL = https://paron-auth.onrender.com
-- TOKEN_SERVICE_URL = https://paron-token.onrender.com
-- LEDGER_SERVICE_URL = https://paron-ledger.onrender.com
-- SYNC_SERVICE_URL = https://paron-sync.onrender.com
-- FRAUD_SERVICE_URL = https://paron-fraud.onrender.com
-- PAYPAL_FUNDING_SERVICE_URL = https://paron-paypal-funding.onrender.com
-
-The gateway has built-in defaults for local development; set all of these explicitly in Render. The Android app should call the gateway, not individual services.
-
-### PayPal Sandbox variables
-
-Set these on **paypal-funding-service**:
-
-| Key | Value |
-|---|---|
-| PAYPAL_CLIENT_ID | Client ID from a PayPal Developer Sandbox app |
-| PAYPAL_CLIENT_SECRET | Sandbox secret from the same app |
-| PAYPAL_BASE_URL | https://api-m.sandbox.paypal.com |
-| PAYPAL_CURRENCY | USD |
-| PAYPAL_MAXIMUM_AMOUNT | 500.00 |
-| PAYPAL_WALLET_CREDIT_RATE | 85.00 demo INR credit per USD |
-
-Never place the PayPal secret in the Android app or a public repository. The conversion rate is only a demo ledger rate, not an exchange-rate quote. Use a Sandbox buyer account to approve checkout.
+Do not create a Render Private Service for Redis. Use your existing free Redis provider if its free tier remains available. Store the Redis, Kafka, Supabase, and PayPal secrets only in Render's Environment settings, not in source control or `render.yaml`.
 
 ## Connect the Android app
 
@@ -275,9 +284,11 @@ Use test users and synthetic transactions only. Never use production PayPal cred
 | Build says SERVICE or JAR_FILE is blank, or Docker tries to copy `/workspace//target/.jar` | In the Render service's **Environment** settings, add `SERVICE` and `JAR_FILE` from the table (for PayPal funding: `paypal-funding-service` and `paypal-funding-service-1.0`). Choose **Save, rebuild, and deploy**. These non-secret values are also Docker build arguments. |
 | Service starts then exits with code 137 | The Free 512 MB memory limit may be too small for that Java service. Restarting or tuning cannot guarantee it will fit. |
 | App gets 502 or times out after inactivity | A free Render service may be waking up; wait about a minute and retry. A chain of sleeping services can take longer. |
-| Database connection fails | Check the Supabase pooler host, port assumption, username, password, TLS access, and that the existing schema is initialized. |
+| Datasource URL is missing or Hibernate cannot determine the PostgreSQL dialect | On the failing service, verify `SUPABASE_HOST`, `SUPABASE_DB`, `SUPABASE_USER`, and `SUPABASE_PASSWORD`; for the shared transaction pooler, copy its exact username (typically `postgres.<project-ref>`). If needed, add `SPRING_DATASOURCE_URL` with `jdbc:postgresql://<pooler-host>:6543/<database>?sslmode=require&connect_timeout=90&tcpKeepAlive=true&prepareThreshold=0` and `SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.PostgreSQLDialect`, then save and redeploy. |
+| Database connection fails | Check the Supabase pooler host, port, username, password, TLS access, and that the existing schema is initialized. |
 | Gateway says public key is missing or invalid | Check the PEM formatting, matching auth private/public keys, issuer, audience, and that Render saved the environment changes. |
-| Kafka connection fails | Copy the provider's exact bootstrap, SASL mechanism, protocol, and JAAS string. |
+| Kafka reports `SSL handshake failed` | Confirm the bootstrap host and port match Aiven's **SASL** connection details, then add the Aiven CA certificate as a Render secret file and set `SPRING_KAFKA_SSL_TRUST_STORE_LOCATION` and `SPRING_KAFKA_SSL_TRUST_STORE_TYPE` as shown above. |
+| Kafka authentication or authorization fails after TLS connects | Check the Aiven service username/password, exact JAAS string, SCRAM mechanism, and read/write ACLs for the sync-service user. |
 | Redis connection fails | Check host/port/password and whether TLS is required. |
 | PayPal top-up fails | Confirm the Sandbox client ID and secret belong to the same Sandbox app; inspect paypal-funding-service logs. |
 
