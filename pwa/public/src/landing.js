@@ -401,5 +401,10 @@
   updateAllowanceSlider(500);
   activateStep('1');
 
+  // Keep the landing page and its demo assets available as an installable PWA.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+  }
+
 })();
 
