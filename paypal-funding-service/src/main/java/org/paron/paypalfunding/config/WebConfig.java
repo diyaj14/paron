@@ -14,6 +14,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/funding/**")
                 .allowedOrigins(allowedOrigins.split(","))
+                .allowedOriginPatterns("https://paron-public*.vercel.app", "https://paron-public.onrender.com")
                 .allowedMethods("GET", "POST")
                 .allowedHeaders("Authorization", "Content-Type")
                 .maxAge(3600);

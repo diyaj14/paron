@@ -222,6 +222,10 @@ Do not use Aiven's service certificate or private key for SASL/SCRAM. Render mou
 - `PAYPAL_CURRENCY` = `USD`
 - `PAYPAL_MAXIMUM_AMOUNT` = `500.00`
 - `PAYPAL_WALLET_CREDIT_RATE` = `85.00` demo INR credit per USD
+- `JWT_PUBLIC_KEY` = same session public key PEM used by the API gateway; the funding service validates session JWTs when the browser connects directly
+- `SESSION_JWT_ISSUER` = same value as auth service (`paron-demo-auth`)
+- `SESSION_JWT_AUDIENCE` = same value as auth service (`paron-wallet`)
+- `CORS_ALLOWED_ORIGINS` = exact published website origin, for example `https://paron-public.vercel.app` (no trailing slash)
 
 Never put the PayPal secret in the Android app or public repository. The conversion rate is a demo ledger rate, not an exchange-rate quote. Use a Sandbox buyer account to approve checkout.
 
@@ -265,9 +269,9 @@ The PWA folder now serves a judge-facing Paron landing page at `/` and a separat
 4. Leave **Build Command** blank.
 5. Set **Publish Directory** to `.` and deploy.
 6. Open the generated `onrender.com` URL. The home page is the overview; its **Experience** buttons open `/demo.html`.
-7. For connected-backend mode, enter your public API gateway URL in the demo and make sure the API gateway's `CORS_ALLOWED_ORIGINS` includes the exact static-site origin. Keep secrets in backend environment settings; never put PayPal secrets in the website.
+7. The judge demo is prefilled with `https://paron-api.onrender.com` and `https://paron-paypal-funding.onrender.com`; its service URLs and demo credentials are tucked under **Service settings**. On page load it begins warming the free services. Judges can press **Reserve with PayPal Sandbox** directly: the demo signs into the configured `demo-customer` account, starts PayPal checkout, and requests the token after the funding service confirms the credit. No URL or sign-in entry is needed when the Render service names and credentials match these defaults. If your actual Render URLs differ, update the two `DEFAULT_*_BASE` values in `pwa/public/src/app.js` before deploying the site. The funding service accepts the signed session token directly and validates it before creating or capturing orders. Set the funding service and API gateway `CORS_ALLOWED_ORIGINS` to the exact published website origin. Keep PayPal secrets in Render Environment settings; never put PayPal secrets in the website.
 
-The website's local simulation is available without backend services. Connected-backend mode needs the relevant services awake and correctly configured. PayPal Sandbox checkout appears only when the PayPal funding endpoints and public client ID are configured. The website demo's offline merchant handoff is still simulated in the browser; use the Android APK to show the real device flow.
+The website's local simulation is available without backend services. The judge-facing demo starts in connected mode and uses preconfigured service URLs; backend services still need to be deployed, awake, and configured. PayPal Sandbox checkout connects directly to the separate PayPal funding service. The service must be deployed and configured; frontend code alone cannot safely capture PayPal payments or credit wallet funds. The website demo's offline merchant handoff is still simulated in the browser; use the Android APK to show the real device flow.
 
 ## Verify the full flow
 
