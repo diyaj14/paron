@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#fffbee">
-  <meta name="description" content="Paron keeps payments moving when connectivity doesn't. PayPal-funded offline wallet with safe reconciliation.">
+  <meta name="description" content="Paron helps people make sample offline payments using money they set aside beforehand, then check the receipt after reconnecting.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./landing.css">
   <title>Paron — Payments that keep moving</title>
@@ -20,11 +20,11 @@
     <nav class="nav-links">
       <span class="nav-status-badge">
         <span class="radar-dot"></span>
-        Offline Capable · P-256 Active
+        Offline payment demo
       </span>
       <a href="#about">About</a>
       <a href="#how">How it works</a>
-      <a href="#advantages">Architecture</a>
+      <a href="#advantages">Advantages</a>
       <a href="#faq">FAQ</a>
     </nav>
     <a class="button button-dark nav-cta" href="./demo.html">
@@ -41,7 +41,7 @@
         </span>
         <h1>When the signal<br>disappears, <em>pay on.</em></h1>
         <p>
-          Paron lets a customer reserve a bounded amount before going offline, pay a nearby merchant with a cryptographically signed receipt, and safely reconcile the transaction when connectivity returns.
+          Paron lets customers set aside a spending limit while online, pay a nearby merchant when the internet is unavailable, and send the payment receipt for checking when they reconnect.
         </p>
         
         <div class="hero-actions">
@@ -54,9 +54,9 @@
         </div>
 
         <div class="hero-badges-row">
-          <span class="hero-metric-chip">⚡ &lt; 50ms Local Handshake</span>
-          <span class="hero-metric-chip">🔒 Zero Private Key Leakage</span>
-          <span class="hero-metric-chip">💳 PayPal Funded</span>
+          <span class="hero-metric-chip">⚡ Pay nearby without internet</span>
+          <span class="hero-metric-chip">🔒 Payment receipt has a digital signature</span>
+          <span class="hero-metric-chip">💳 PayPal Sandbox demo</span>
         </div>
       </div>
 
@@ -68,15 +68,15 @@
           <div class="sim-btn-group">
             <span id="hero-signal-pill" class="signal-pill pill-online">
               <span id="hero-signal-icon">🟢</span>
-              <span id="hero-signal-text">Signal: 5G Online</span>
+              <span id="hero-signal-text">Connection: Online</span>
             </span>
             <button id="hero-toggle-signal" type="button" class="sim-action-btn secondary">
-              📴 Simulate Signal Drop
+              📴 Simulate internet loss
             </button>
           </div>
           <div class="sim-btn-group">
             <button id="hero-trigger-pay" type="button" class="sim-action-btn">
-              ⚡ Simulate Tap-to-Pay (₹125)
+              ⚡ Simulate a ₹125 payment
             </button>
             <button id="hero-reset-sim" type="button" class="sim-action-btn secondary" style="display:none;">
               ↺ Reset
@@ -99,7 +99,7 @@
             <strong id="hero-merch-title">Terminal Idle</strong>
             <small id="hero-merch-status">Coffee House · Terminal #1</small>
             <div class="phone-line"></div>
-            <small id="hero-merch-detail">Online & ready for offline BLE</small>
+            <small id="hero-merch-detail">Demo merchant is ready</small>
           </div>
 
           <!-- Customer Phone (Side A) -->
@@ -115,7 +115,7 @@
               </div>
             </div>
 
-            <small id="hero-cust-allowance-label" class="soft">RESERVED OFFLINE ALLOWANCE</small>
+            <small id="hero-cust-allowance-label" class="soft">SET ASIDE FOR OFFLINE USE</small>
             <div id="hero-cust-amount" class="phone-amount">₹500</div>
             <div class="phone-meter">
               <i id="hero-cust-meter-bar" style="width:100%;"></i>
@@ -125,13 +125,13 @@
               <span class="pay-icon">↗</span>
               <span>
                 <b>Allowance Reserved</b>
-                <small>Synchronized with Cloud Ledger</small>
+                <small>Set aside before going offline</small>
               </span>
               <span class="check-pill">ACTIVE</span>
             </div>
 
             <div id="hero-cust-pay-btn" class="phone-button">Pay ₹125 (Offline Ready)</div>
-            <div class="phone-caption">Cryptographic ECDSA P-256 On Device</div>
+            <div class="phone-caption">Illustration · no real payment is made</div>
           </div>
 
           <!-- Dynamic Floating Badges -->
@@ -145,25 +145,25 @@
     <section class="marquee-section" aria-label="Core Architectural Guarantees">
       <div class="marquee-track">
         <div class="marquee-item"><span class="highlight">BUILT AROUND</span><i></i></div>
-        <div class="marquee-item">PREPAID BOUNDED ALLOWANCES<i></i></div>
-        <div class="marquee-item">ECDSA P-256 SIGNED RECEIPTS<i></i></div>
-        <div class="marquee-item">ONE-TIME CLAIM TOKENS<i></i></div>
-        <div class="marquee-item">DUPLICATE REPLAY PROTECTION<i></i></div>
-        <div class="marquee-item">TWO-SIDED RECONCILIATION<i></i></div>
-        <div class="marquee-item">PAYPAL SANDBOX FUNDING<i></i></div>
-        <div class="marquee-item">NO RAW JWTS OVER THE AIR<i></i></div>
-        <div class="marquee-item">AIRPLANE MODE TESTED<i></i></div>
+        <div class="marquee-item">SET A SPENDING LIMIT BEFORE GOING OFFLINE<i></i></div>
+        <div class="marquee-item">RECEIPTS WITH DIGITAL SIGNATURES<i></i></div>
+        <div class="marquee-item">RESERVE MONEY FOR OFFLINE USE<i></i></div>
+        <div class="marquee-item">CHECK FOR REPEATED PAYMENTS<i></i></div>
+        <div class="marquee-item">SEND RECEIPTS AFTER RECONNECTING<i></i></div>
+        <div class="marquee-item">PAYPAL SANDBOX DEMO<i></i></div>
+        <div class="marquee-item">WEBSITE PAYMENT HANDOFF IS SIMULATED<i></i></div>
+        <div class="marquee-item">DESIGNED FOR PATCHY CONNECTIONS<i></i></div>
 
         <!-- Duplicated for seamless loop -->
         <div class="marquee-item"><span class="highlight">BUILT AROUND</span><i></i></div>
-        <div class="marquee-item">PREPAID BOUNDED ALLOWANCES<i></i></div>
-        <div class="marquee-item">ECDSA P-256 SIGNED RECEIPTS<i></i></div>
-        <div class="marquee-item">ONE-TIME CLAIM TOKENS<i></i></div>
-        <div class="marquee-item">DUPLICATE REPLAY PROTECTION<i></i></div>
-        <div class="marquee-item">TWO-SIDED RECONCILIATION<i></i></div>
-        <div class="marquee-item">PAYPAL SANDBOX FUNDING<i></i></div>
-        <div class="marquee-item">NO RAW JWTS OVER THE AIR<i></i></div>
-        <div class="marquee-item">AIRPLANE MODE TESTED<i></i></div>
+        <div class="marquee-item">SET A SPENDING LIMIT BEFORE GOING OFFLINE<i></i></div>
+        <div class="marquee-item">RECEIPTS WITH DIGITAL SIGNATURES<i></i></div>
+        <div class="marquee-item">RESERVE MONEY FOR OFFLINE USE<i></i></div>
+        <div class="marquee-item">CHECK FOR REPEATED PAYMENTS<i></i></div>
+        <div class="marquee-item">SEND RECEIPTS AFTER RECONNECTING<i></i></div>
+        <div class="marquee-item">PAYPAL SANDBOX DEMO<i></i></div>
+        <div class="marquee-item">WEBSITE PAYMENT HANDOFF IS SIMULATED<i></i></div>
+        <div class="marquee-item">DESIGNED FOR PATCHY CONNECTIONS<i></i></div>
       </div>
     </section>
 
@@ -175,13 +175,13 @@
       </div>
       <div class="about-copy">
         <p>
-          Paron is designed for moments where connectivity is spotty or unavailable: metro stations, flights, basements, and rural outposts. Before stepping offline, the customer reserves an allowance backed by their PayPal account.
+          Paron is for places where internet access may be unreliable, such as transit stations or rural areas. While online, a customer sets aside part of their wallet balance as an offline spending limit. PayPal Sandbox funding can be shown when the backend is configured.
         </p>
         <p>
-          A nearby merchant can immediately accept an asymmetric cryptographic receipt. Once either side reconnects, the backend reconciliation engine verifies signatures and settles the transaction against the ledger.
+          When a customer pays offline, the merchant keeps a payment receipt. After the devices reconnect, Paron’s online service checks the receipt and spending limit before updating the merchant’s account record. This website simulates the nearby handoff; it does not connect to a real merchant phone.
         </p>
         <a class="text-link" href="./demo.html">
-          Walk through the live payment flow <span>→</span>
+          Walk through the payment flow <span>→</span>
         </a>
       </div>
     </section>
@@ -192,7 +192,7 @@
         <div class="section-heading centered">
           <span class="eyebrow">02 / THE PAYMENT FLOW</span>
           <h2>Four steps. One connected story.</h2>
-          <p>Click any step to inspect the exact cryptographic payload, hardware action, and ledger state.</p>
+          <p>Select a step to see what happens for the customer and merchant. The examples explain the flow; the website’s nearby payment handoff is simulated.</p>
         </div>
 
         <div class="stepper-container">
@@ -202,28 +202,28 @@
               <span class="step-no">STEP 01</span>
               <div class="step-icon">◉</div>
               <h3>Reserve</h3>
-              <p>Customer reserves ₹500 from their PayPal wallet under account lock.</p>
+              <p>While online, the customer sets aside ₹500 from the example ₹1,000 balance.</p>
             </article>
 
             <article class="flow-step-item" data-step="2">
               <span class="step-no">STEP 02</span>
               <div class="step-icon">⌁</div>
               <h3>Go offline</h3>
-              <p>Connectivity drops. The device activates local Safe Mode with its P-256 key.</p>
+              <p>The internet drops. The app can still use the amount reserved beforehand.</p>
             </article>
 
             <article class="flow-step-item" data-step="3">
               <span class="step-no">STEP 03</span>
               <div class="step-icon">↗</div>
               <h3>Pay nearby</h3>
-              <p>A signed receipt is framed over BLE GATT and accepted by the merchant.</p>
+              <p>The merchant receives a receipt showing who was paid and how much.</p>
             </article>
 
             <article class="flow-step-item" data-step="4">
               <span class="step-no">STEP 04</span>
               <div class="step-icon">⟳</div>
               <h3>Reconcile</h3>
-              <p>On reconnect, Sync Service verifies the receipt and updates the ledger.</p>
+              <p>After reconnecting, Paron’s online service checks the receipt and updates the merchant’s account record.</p>
             </article>
           </div>
 
@@ -240,26 +240,26 @@
       <div class="section-heading">
         <span class="eyebrow">03 / ARCHITECTURE &amp; ADVANTAGES</span>
         <h2>Designed for the<br><em>edge of the network.</em></h2>
-        <p>Offline payments need mathematical safeguards and an honest path back to the ledger.</p>
+        <p>Offline payments need a clear spending limit and a way to check payment receipts when internet returns.</p>
       </div>
 
       <div class="bento-grid">
         <!-- Bento Card 1: Interactive Bounded Exposure Calculator (Span 7) -->
         <article class="bento-card bento-span-7">
-          <span class="bento-card-badge">01 / BOUNDED EXPOSURE</span>
-          <h3>Prepaid Allowance Calculator</h3>
+          <span class="bento-card-badge">01 / OFFLINE SPENDING LIMIT</span>
+          <h3>Choose how much to set aside</h3>
           <p>
-            Offline risk is strictly bounded to the prepaid allowance. Drag the slider to see how funds are partitioned between offline lock and online protection.
+            Choose how much of this example ₹1,000 balance to set aside before going offline. You can spend up to that amount offline; the rest remains available for online payments.
           </p>
 
           <div class="slider-interactive-box">
             <div class="slider-values-row">
               <div class="slider-val-box">
-                <small>🔒 Locked for Offline</small>
+                <small>🔒 Set aside for offline</small>
                 <strong id="bento-locked-val">₹500.00</strong>
               </div>
               <div class="slider-val-box">
-                <small>🌐 Protected Online</small>
+                <small>🌐 Available for online</small>
                 <strong id="bento-online-val">₹500.00</strong>
               </div>
             </div>
@@ -272,66 +272,71 @@
             <input id="allowance-slider" type="range" class="allowance-range-slider" min="100" max="1000" step="50" value="500">
 
             <div id="bento-exposure-summary" class="slider-caption">
-              Your maximum offline liability is strictly capped at <b>₹500</b>. The remaining <b>₹500</b> in your PayPal account cannot be touched by offline claims.
+              Of the example ₹1,000 balance, ₹500 is set aside for offline purchases and ₹500 remains available for online use.
             </div>
           </div>
         </article>
 
         <!-- Bento Card 2: Cryptographic Receipt Inspector (Span 5) -->
         <article class="bento-card bento-span-5">
-          <span class="bento-card-badge">02 / CRYPTOGRAPHIC SECURITY</span>
-          <h3>ECDSA P-256 Receipt</h3>
+          <span class="bento-card-badge">02 / PAYMENT RECEIPT CHECK</span>
+          <h3>A receipt with a digital seal</h3>
           <p>
-            Canonical NUL-delimited strings ensure both device and backend verify identical cryptographic hashes.
+            The receipt shows the amount and merchant. A digital signature works like a seal: it helps Paron’s online service detect if those details were changed.
           </p>
 
           <div class="code-inspector-box">
             <div class="code-inspector-header">
-              <span class="code-lang-tag">CANONICAL REPRESENTATION</span>
-              <button id="btn-copy-canonical" type="button" class="btn-copy-code">Copy String</button>
+              <span class="code-lang-tag">EXAMPLE PAYMENT RECEIPT</span>
+              <button id="btn-copy-canonical" type="button" class="btn-copy-code">Copy example</button>
             </div>
-            <pre class="code-inspector-body"><code id="canonical-code-text">txn-901\0paron.tok.500\0merchant-cafe-002\0125\02026-11-09T17:00:00\0dev-88a4</code></pre>
+            <pre class="code-inspector-body"><code id="canonical-code-text">Payment: txn-901
+Merchant: Coffee House
+Amount: ₹125.00
+Offline limit: ₹500.00
+Status: Waiting to sync
+Digital signature: Attached by the customer’s app</code></pre>
           </div>
           <small style="display:block;margin-top:10px;color:#64748b;font-size:11px;">
-            ✓ Signed with device private key via SubtleCrypto P-256
+            This is an example for explanation. The website demo labels its browser-generated receipt separately from a real Android device payment.
           </small>
         </article>
 
         <!-- Bento Card 3: AI Anomaly Sentinel & Conflict Resolution (Span 5) -->
         <article class="bento-card bento-span-5">
-          <span class="bento-card-badge">03 / FRAUD &amp; CONFLICT ADJUDICATION</span>
-          <h3>Double-Spend Protection</h3>
+          <span class="bento-card-badge">03 / REPEATED PAYMENT CHECKS</span>
+          <h3>Check if the same limit was spent twice</h3>
           <p>
-            If a customer presents the same allowance to two merchants offline, the engine settles the first valid receipt and rejects the conflict.
+            A customer could show offline receipts to more than one merchant before either can contact the backend. When receipts sync, the backend checks their combined amount against the reserved limit and flags claims that exceed it.
           </p>
 
           <div class="conflict-adjudication-box">
             <div class="conflict-row">
-              <span>Receipt A (Metro Turnstile · ₹500)</span>
-              <span class="conflict-pill settled">SETTLED</span>
+              <span>Example receipt A · within the limit</span>
+              <span class="conflict-pill settled">ACCEPTED</span>
             </div>
             <div class="conflict-row">
-              <span>Receipt B (Cafe Brew · ₹500)</span>
-              <span class="conflict-pill rejected">REJECTED (CAP EXCEEDED)</span>
+              <span>Example receipt B · would exceed the limit</span>
+              <span class="conflict-pill rejected">FLAGGED</span>
             </div>
           </div>
           <small style="display:block;margin-top:10px;color:#64748b;font-size:11px;">
-            🛡️ AI Judge issues binding ruling: <b>DOUBLE_SPEND</b>
+            These are example outcomes. A later check cannot undo goods already handed over offline.
           </small>
         </article>
 
         <!-- Bento Card 4: Edge Transport & Performance (Span 7) -->
         <article class="bento-card bento-span-7">
-          <span class="bento-card-badge">04 / EDGE TRANSPORT</span>
-          <h3>Sub-Second BLE Handshake</h3>
+          <span class="bento-card-badge">04 / NEARBY PAYMENT</span>
+          <h3>Exchange a receipt nearby</h3>
           <p>
-            Proprietary <code>paron-ble-v1</code> protocol fragments JSON payment offers across 175-byte GATT frames with 0x50 headers and payload hash validation.
+            The Android app is designed to exchange payment details with a nearby merchant phone without using the internet. This website is an illustration; it does not connect to Bluetooth or measure connection speed.
           </p>
 
           <div class="transport-meter-box">
-            <div class="latency-metric">&lt; 18ms</div>
+            <div class="latency-metric">No internet</div>
             <div class="latency-caption">
-              Local verification latency on Android and Web Bluetooth. Works in full airplane mode without radio broadcast leaks.
+              Offline payment is meant to use a nearby device connection. Use the Android app to demonstrate the device flow; this website simulates it.
             </div>
           </div>
         </article>
@@ -344,17 +349,17 @@
         <div class="section-heading centered">
           <span class="eyebrow">04 / HACKATHON FAQ</span>
           <h2>Everything you need to know.</h2>
-          <p>Straightforward answers on our security model, PayPal integration, and edge cases.</p>
+          <p>Plain answers about offline limits, payment receipts, PayPal Sandbox, and the demo.</p>
         </div>
 
         <div class="faq-container">
           <div class="faq-item open">
             <button class="faq-trigger" type="button">
-              <span>How does Paron prevent double spending without internet?</span>
+              <span>How does Paron check if someone pays twice?</span>
               <span class="faq-icon">+</span>
             </button>
             <div class="faq-content">
-              Paron uses a prepaid allowance model. When online, the user locks a specific amount (e.g. ₹500) from their PayPal balance into a one-time reservation token. Even if a user copies their offline token to another device, the Sync Service enforces atomic cumulative spend checks on reconciliation: the first valid receipt settles, and conflicting claims exceeding the cap are rejected. Total financial exposure is strictly bounded to the prepaid allowance.
+              Before losing internet access, the customer sets aside an amount for offline purchases. When receipts later reach Paron’s online service, it compares the total with that limit and looks for repeated payments. A merchant may already have handed over goods before those checks happen, so offline payments still carry risk. The website walkthrough uses sample data; it does not reserve or move real money.
             </div>
           </div>
 
@@ -364,17 +369,17 @@
               <span class="faq-icon">+</span>
             </button>
             <div class="faq-content">
-              In an offline system, no server or AI model can physically stop a dishonest actor from handing over a signed receipt for a cup of coffee offline. Claiming "zero-risk offline payments" is mathematically dishonest. Instead, Paron limits risk to a prepaid allowance, cryptographically verifies authenticity via ECDSA P-256, and uses post-reconnection AI reasoning to adjudicate disputes and flag suspicious merchants or velocity patterns.
+              While devices have no internet, a server cannot check a payment as it happens. A merchant might accept a receipt that is later rejected during syncing. Paron limits the amount available for offline spending and checks receipts after reconnecting; this reduces risk but cannot remove it completely.
             </div>
           </div>
 
           <div class="faq-item">
             <button class="faq-trigger" type="button">
-              <span>How is PayPal integrated into the payment flow?</span>
+              <span>How does PayPal fit into the demo?</span>
               <span class="faq-icon">+</span>
             </button>
             <div class="faq-content">
-              Paron is presented as a "PayPal-funded offline wallet with safe reconciliation." PayPal is the authoritative funding source: users top up their wallet using PayPal Sandbox Orders and Captures. Reservations lock funds against that balance, and the ledger settles merchant claims back to the system upon reconnection.
+              The demo can show PayPal Sandbox checkout when the PayPal funding service is configured. Sandbox uses test accounts and test payments, not real money. The website’s offline payment walkthrough is simulated; sending receipts and updating the merchant’s account record require the online services to be available.
             </div>
           </div>
 
@@ -384,7 +389,7 @@
               <span class="faq-icon">+</span>
             </button>
             <div class="faq-content">
-              Yes. The project includes a native Kotlin Jetpack Compose Android app (<code>merchant-android</code>) that acts as the BLE peripheral receiver, as well as the installable PWA with Web Bluetooth support for Chrome on Android. For browser testing without hardware, the built-in simulator provides an identical cryptographic experience.
+              The project includes a native Android app for demonstrating the phone experience. This website is a separate judge walkthrough: its phone-to-phone payment animation is simulated and does not use Bluetooth or Android secure hardware. Use the Android app to show the device flow.
             </div>
           </div>
         </div>
@@ -416,8 +421,8 @@
             <small>Available balance</small>
           </div>
           <div class="screen-tile">
-            ◈ &nbsp; Active Offline Token
-            <small>₹300 available to spend</small>
+            ◈ &nbsp; Offline spending limit
+            <small>₹300 set aside to spend</small>
             <i></i>
           </div>
           <div class="screen-nav">
@@ -437,7 +442,7 @@
             <small>To Coffee House</small>
           </div>
           <div class="screen-tile">
-            ✓ &nbsp; Signed receipt
+            ✓ &nbsp; Payment receipt with digital seal
             <small>Ready to hand over</small>
             <i></i>
           </div>
@@ -456,7 +461,7 @@
           <span class="eyebrow">SEE BOTH SIDES RECONCILE</span>
           <h2>Take Paron for a spin.</h2>
           <p>
-            Reserve an allowance, simulate network loss, tap to pay, and watch both the consumer and merchant terminals settle in real time.
+            Set aside a sample allowance, simulate losing internet, and follow a sample payment receipt from the customer to the merchant. Backend settlement is shown only in the connected demo when the service reports it.
           </p>
         </div>
         <div class="final-actions">
@@ -474,7 +479,7 @@
       <span class="brand-mark">P</span>
       paron
     </a>
-    <p>PayPal AI Hackathon 2026 · Built around bounded exposure and safe reconciliation.</p>
+    <p>PayPal AI Hackathon 2026 · Offline spending limits and payment checks.</p>
     <a href="./demo.html">Open Interactive Demo ↗</a>
   </footer>
 

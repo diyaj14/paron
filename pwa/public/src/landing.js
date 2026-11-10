@@ -73,37 +73,37 @@
     if (isPaid) {
       // Payment completed state
       if (heroCustAmount) heroCustAmount.textContent = '₹375';
-      if (heroCustAllowanceLabel) heroCustAllowanceLabel.textContent = 'REMAINING ALLOWANCE (₹125 SPENT)';
+      if (heroCustAllowanceLabel) heroCustAllowanceLabel.textContent = 'LEFT AFTER THIS SAMPLE PAYMENT';
       if (heroCustMeterBar) heroCustMeterBar.style.width = '75%';
       if (heroCustPayButton) {
-        heroCustPayButton.textContent = '✓ Receipt Signed';
+        heroCustPayButton.textContent = '✓ Demo payment complete';
         heroCustPayButton.classList.add('btn-paid');
       }
       if (heroCustStatusCard) {
         heroCustStatusCard.innerHTML = `
           <span class="pay-icon check-icon">✓</span>
-          <span><b>Receipt Signed Locally</b><small>ECDSA P-256 · #MRC-77A2</small></span>
-          <span class="check-pill">QUEUED</span>
+          <span><b>Sample receipt created</b><small>Website animation · not sent to a merchant</small></span>
+          <span class="check-pill">DEMO</span>
         `;
       }
       if (heroMerchIcon) {
         heroMerchIcon.innerHTML = '✓';
         heroMerchIcon.className = 'merchant-icon merchant-icon-success';
       }
-      if (heroMerchTitle) heroMerchTitle.textContent = 'Payment Accepted';
-      if (heroMerchStatus) heroMerchStatus.textContent = 'Receipt Verified · Pending Sync';
+      if (heroMerchTitle) heroMerchTitle.textContent = 'Sample payment received';
+      if (heroMerchStatus) heroMerchStatus.textContent = 'Website simulation · not synced';
       if (heroMerchDetail) heroMerchDetail.textContent = '₹125.00 · Coffee House';
       if (heroTagOne) {
-        heroTagOne.innerHTML = '✓ &nbsp; Signed & Verified (ECDSA P-256)';
+        heroTagOne.innerHTML = '✓ &nbsp; Sample receipt created';
         heroTagOne.className = 'float-tag tag-one tag-success';
       }
       if (heroTagTwo) {
-        heroTagTwo.innerHTML = '⏱ &nbsp; 18ms Handshake · Offline';
+        heroTagTwo.innerHTML = 'ⓘ &nbsp; No real payment made';
         heroTagTwo.className = 'float-tag tag-two tag-active';
       }
       if (heroTriggerPay) {
         heroTriggerPay.disabled = true;
-        heroTriggerPay.textContent = '✓ Payment Complete';
+        heroTriggerPay.textContent = '✓ Demo complete';
       }
       if (heroResetSim) heroResetSim.style.display = 'inline-flex';
     } else if (isOffline) {
@@ -111,73 +111,73 @@
       if (heroSignalPill) {
         heroSignalPill.className = 'signal-pill pill-offline';
         if (heroSignalIcon) heroSignalIcon.textContent = '📴';
-        if (heroSignalText) heroSignalText.textContent = 'Signal: Disconnected';
+        if (heroSignalText) heroSignalText.textContent = 'Internet: Disconnected';
       }
       if (heroCustSignalBars) {
         heroCustSignalBars.className = 'signal-bars signal-none';
         heroCustSignalBars.innerHTML = '<span></span><span></span><span></span><span></span><i>✕</i>';
       }
-      if (heroCustNetLabel) heroCustNetLabel.textContent = 'OFFLINE · SAFE MODE';
+      if (heroCustNetLabel) heroCustNetLabel.textContent = 'INTERNET DISCONNECTED';
       if (heroCustAmount) heroCustAmount.textContent = '₹500';
-      if (heroCustAllowanceLabel) heroCustAllowanceLabel.textContent = 'OFFLINE ALLOWANCE (LOCKED)';
+      if (heroCustAllowanceLabel) heroCustAllowanceLabel.textContent = 'AMOUNT SET ASIDE FOR OFFLINE';
       if (heroCustMeterBar) heroCustMeterBar.style.width = '100%';
       if (heroCustPayButton) {
-        heroCustPayButton.textContent = 'Pay ₹125 offline';
+        heroCustPayButton.textContent = 'Simulate ₹125 payment';
         heroCustPayButton.classList.remove('btn-paid');
       }
       if (heroCustStatusCard) {
         heroCustStatusCard.innerHTML = `
           <span class="pay-icon">↗</span>
-          <span><b>Offline Token Active</b><small>Bound to device hardware</small></span>
-          <span class="check-pill">READY</span>
+          <span><b>Sample allowance ready</b><small>Available in this illustration</small></span>
+          <span class="check-pill">DEMO</span>
         `;
       }
       if (heroMerchIcon) {
         heroMerchIcon.innerHTML = '⌁';
         heroMerchIcon.className = 'merchant-icon';
       }
-      if (heroMerchTitle) heroMerchTitle.textContent = 'Awaiting BLE Payment';
-      if (heroMerchStatus) heroMerchStatus.textContent = 'Advertising · GATT Service Ready';
-      if (heroMerchDetail) heroMerchDetail.textContent = 'Ready for nearby customer';
+      if (heroMerchTitle) heroMerchTitle.textContent = 'Waiting for sample payment';
+      if (heroMerchStatus) heroMerchStatus.textContent = 'Website simulation · no Bluetooth';
+      if (heroMerchDetail) heroMerchDetail.textContent = 'A real merchant phone is not connected';
       if (heroTagOne) {
-        heroTagOne.innerHTML = '📴 &nbsp; Offline Safe Mode Engaged';
+        heroTagOne.innerHTML = '📴 &nbsp; Internet disconnected';
         heroTagOne.className = 'float-tag tag-one tag-warning';
       }
       if (heroTagTwo) {
-        heroTagTwo.innerHTML = '🔒 &nbsp; ₹500 Allowance Bound';
+        heroTagTwo.innerHTML = '🔒 &nbsp; ₹500 sample limit';
         heroTagTwo.className = 'float-tag tag-two';
       }
       if (heroTriggerPay) {
         heroTriggerPay.disabled = false;
-        heroTriggerPay.textContent = '⚡ Simulate Tap-to-Pay (₹125)';
+        heroTriggerPay.textContent = '⚡ Simulate a ₹125 payment';
       }
       if (heroToggleSignal) {
-        heroToggleSignal.textContent = '🟢 Reconnect Signal';
+        heroToggleSignal.textContent = '🟢 Restore internet';
       }
     } else {
       // Normal online state
       if (heroSignalPill) {
         heroSignalPill.className = 'signal-pill pill-online';
         if (heroSignalIcon) heroSignalIcon.textContent = '🟢';
-        if (heroSignalText) heroSignalText.textContent = 'Signal: 5G Online';
+        if (heroSignalText) heroSignalText.textContent = 'Connection: Online';
       }
       if (heroCustSignalBars) {
         heroCustSignalBars.className = 'signal-bars signal-full';
         heroCustSignalBars.innerHTML = '<span></span><span></span><span></span><span></span>';
       }
-      if (heroCustNetLabel) heroCustNetLabel.textContent = 'WALLET · 5G ONLINE';
+      if (heroCustNetLabel) heroCustNetLabel.textContent = 'WALLET · ONLINE';
       if (heroCustAmount) heroCustAmount.textContent = '₹500';
       if (heroCustAllowanceLabel) heroCustAllowanceLabel.textContent = 'RESERVED OFFLINE ALLOWANCE';
       if (heroCustMeterBar) heroCustMeterBar.style.width = '100%';
       if (heroCustPayButton) {
-        heroCustPayButton.textContent = 'Pay ₹125 (Offline Ready)';
+        heroCustPayButton.textContent = 'Simulate a ₹125 payment';
         heroCustPayButton.classList.remove('btn-paid');
       }
       if (heroCustStatusCard) {
         heroCustStatusCard.innerHTML = `
           <span class="pay-icon">↗</span>
-          <span><b>Allowance Reserved</b><small>Synchronized with Cloud Ledger</small></span>
-          <span class="check-pill">ACTIVE</span>
+          <span><b>Sample allowance set aside</b><small>Example only · no money moved</small></span>
+          <span class="check-pill">DEMO</span>
         `;
       }
       if (heroMerchIcon) {
@@ -186,21 +186,21 @@
       }
       if (heroMerchTitle) heroMerchTitle.textContent = 'Terminal Idle';
       if (heroMerchStatus) heroMerchStatus.textContent = 'Coffee House · Terminal #1';
-      if (heroMerchDetail) heroMerchDetail.textContent = 'Online & ready for offline BLE';
+      if (heroMerchDetail) heroMerchDetail.textContent = 'Website illustration · no Bluetooth';
       if (heroTagOne) {
-        heroTagOne.innerHTML = '⌁ &nbsp; Connected & Synchronized';
+        heroTagOne.innerHTML = '⌁ &nbsp; Internet connected';
         heroTagOne.className = 'float-tag tag-one';
       }
       if (heroTagTwo) {
-        heroTagTwo.innerHTML = '✓ &nbsp; Allowance Reserved Online';
+        heroTagTwo.innerHTML = '✓ &nbsp; Example limit: ₹500';
         heroTagTwo.className = 'float-tag tag-two';
       }
       if (heroTriggerPay) {
         heroTriggerPay.disabled = false;
-        heroTriggerPay.textContent = '⚡ Simulate Tap-to-Pay (₹125)';
+        heroTriggerPay.textContent = '⚡ Simulate a ₹125 payment';
       }
       if (heroToggleSignal) {
-        heroToggleSignal.textContent = '📴 Simulate Signal Drop';
+        heroToggleSignal.textContent = '📴 Simulate internet loss';
       }
       if (heroResetSim) heroResetSim.style.display = 'none';
     }
@@ -224,7 +224,7 @@
     }
 
     if (heroCustPayButton) {
-      heroCustPayButton.textContent = 'Signing ECDSA P-256...';
+      heroCustPayButton.textContent = 'Creating sample receipt…';
     }
 
     setTimeout(() => {
@@ -282,7 +282,7 @@
     if (bentoMeterOnline) bentoMeterOnline.style.width = `${onlinePct}%`;
 
     if (bentoExposureSummary) {
-      bentoExposureSummary.innerHTML = `Your maximum offline liability is strictly capped at <b>₹${locked}</b>. The remaining <b>₹${online}</b> in your PayPal account cannot be touched by offline claims.`;
+      bentoExposureSummary.innerHTML = `Of the example <b>₹1,000 wallet balance</b>, <b>₹${locked.toLocaleString('en-IN')}</b> is set aside for offline purchases and <b>₹${online.toLocaleString('en-IN')}</b> remains available for online use. While offline, the customer can spend up to the amount set aside.`;
     }
   }
 
@@ -292,7 +292,7 @@
     });
   }
 
-  // --- 5. Interactive Copy Canonical String Inspector ---
+  // --- 5. Copy a readable example payment receipt ---
   const copyCanonicalBtn = document.getElementById('btn-copy-canonical');
   const canonicalCodeText = document.getElementById('canonical-code-text');
 
@@ -313,38 +313,38 @@
     });
   }
 
-  // --- 6. Interactive 4-Step Payment Flow Stepper ---
+  // --- 6. Interactive four-step payment walkthrough ---
   const stepItems = document.querySelectorAll('.flow-step-item');
   const stepPreviewBox = document.getElementById('step-preview-box');
 
   const STEP_DATA = {
     '1': {
-      title: 'Step 1: Reserve Prepaid Allowance Online',
-      kicker: 'PRE-OFFLINE ALLOCATION',
-      stateBadge: 'STATUS: ACTIVE_RESERVATION',
-      description: 'The user locks ₹500 before stepping out or boarding a flight. Ledger Service atomically reserves ₹500 under a PESSIMISTIC_WRITE account lock and issues a cryptographic TokenRecord.',
-      eventCode: 'POST /api/v1/tokens/gettoken\n{\n  "userId": "demo-customer",\n  "deviceId": "dev-p256-88a4",\n  "amount": 500,\n  "expiryHours": 6\n}\n➔ 201 Created · reservationId: "res-901c"'
+      title: 'Step 1: Set money aside while online',
+      kicker: 'BEFORE INTERNET DROPS',
+      stateBadge: 'EXAMPLE ALLOWANCE READY',
+      description: 'The customer chooses how much of the example ₹1,000 wallet balance to reserve. That amount becomes the maximum available for offline purchases.',
+      eventCode: 'Example wallet balance: ₹1,000\nSet aside for offline: ₹500\nStill available online: ₹500\nThis website step is an illustration; it does not reserve real money.'
     },
     '2': {
-      title: 'Step 2: Signal Drops — Safe Mode Engaged',
-      kicker: 'LOCAL STATE ACTIVATION',
-      stateBadge: 'NETWORK: DISCONNECTED',
-      description: 'No cell tower or Wi-Fi needed. The PWA and Android companion activate local offline mode. The customer wallet holds the signed token in IndexedDB, completely isolated from network interruptions.',
-      eventCode: 'Event: window.offline\nWalletState: OFFLINE_SAFE_MODE\nTokenAvailable: ₹500.00\nDeviceKey: Loaded from IndexedDB (P-256)'
+      title: 'Step 2: The internet connection drops',
+      kicker: 'PAYMENTS CAN USE THE RESERVED AMOUNT',
+      stateBadge: 'OFFLINE',
+      description: 'The app can still use the amount the customer set aside before losing internet. This website demonstrates the idea with an animation; it does not switch a real phone into offline mode.',
+      eventCode: 'Internet: Disconnected\nOffline amount reserved earlier: ₹500\nWebsite animation: Example only'
     },
     '3': {
-      title: 'Step 3: Pay Nearby — Local Signed Receipt',
-      kicker: 'BLE GATT 0x50 FRAMING',
-      stateBadge: 'STATUS: PENDING_SYNC (LOCAL)',
-      description: 'Customer initiates a ₹125 coffee payment. The device calculates the canonical hash, signs it with its private ECDSA P-256 key, and transmits it via GATT frames. Merchant validates format and responds with signed receipt MRC-77A2.',
-      eventCode: 'Payload:\ncanonicalString: "txn-104\\0paron.tok.500\\0merchant-cafe-002\\0125\\0..."\nsignature: "MEQCIDK3x... (ECDSA P-256)"\nMerchantResponse: PAYMENT_ACCEPTED\nLocalStatus: "Pending sync — paid offline"'
+      title: 'Step 3: The merchant receives a payment receipt',
+      kicker: 'PAY WHILE OFFLINE',
+      stateBadge: 'EXAMPLE · WAITING TO SYNC',
+      description: 'The customer pays ₹125 at Coffee House. A receipt records the amount and merchant. Its digital signature works like a seal, helping Paron’s online service detect if those details were changed. The website simulates the handoff; it does not use Bluetooth or contact a merchant phone.',
+      eventCode: 'Merchant: Coffee House\nPayment amount: ₹125\nReceipt: Created in this website example\nMerchant status: Received · waiting to sync'
     },
     '4': {
-      title: 'Step 4: Reconnect & Atomic Reconciliation',
-      kicker: '4-STAGE DETERMINISTIC RECONCILIATION',
-      stateBadge: 'LEDGER: SETTLED',
-      description: 'Upon reconnecting, the receipt is uploaded to Sync Service. Signature is verified, allowance cap confirmed, idempotency validated, and ledger settled atomically without double-debiting.',
-      eventCode: 'Sync Timeline:\n1. Receipt uploaded ➔ 202 Accepted\n2. Signature verified against device public key ✓\n3. Token spend state within cap (₹125 <= ₹500) ✓\n4. Ledger settled: reservation res-901c debit ₹125 ➔ SETTLED'
+      title: 'Step 4: Reconnect and check the receipt',
+      kicker: 'AFTER INTERNET RETURNS',
+      stateBadge: 'BACKEND CHECK REQUIRED',
+      description: 'When the devices reconnect, the app can send the receipt to Paron’s online service. It checks the signature, spending limit, and repeated claims before updating the merchant’s account record. This does not show a bank transfer.',
+      eventCode: '1. Send the receipt to Paron’s online service\n2. Check who signed it and whether details changed\n3. Check the spending limit and repeated payments\n4. Update the merchant’s account record\nThe actual result depends on the connected services.'
     }
   };
 
