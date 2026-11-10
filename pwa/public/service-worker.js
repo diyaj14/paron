@@ -1,5 +1,5 @@
-const CACHE = "paron-wallet-v2";
-const ASSETS = ["./", "./index.html", "./styles.css", "./src/app.js", "./manifest.webmanifest", "./icons/paron.svg", "./icons/paron-maskable.svg"];
+const CACHE = "paron-experience-v4";
+const ASSETS = ["./", "./index.html", "./landing.css", "./demo.html", "./styles.css", "./src/app.js", "./src/landing.js", "./manifest.webmanifest", "./icons/paron.svg", "./icons/paron-maskable.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));

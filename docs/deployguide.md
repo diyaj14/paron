@@ -255,7 +255,19 @@ Render deploys the backend, not the Android application binary. The Android app 
 5. Build a demo APK from Android Studio or with the Gradle wrapper. The generated APK is under app/build/outputs/apk/.
 6. Publish the APK as a GitHub Release asset or another free download. Add that download link to the README/Devpost submission. Do not upload signing keys.
 
-You do not need to deploy the PWA or create a Render Static Site for the customer app.
+## Deploy the judge website (optional, free)
+
+The PWA folder now serves a judge-facing Paron landing page at `/` and a separate interactive consumer/merchant walkthrough at `/demo.html`. This is a companion website; it does not replace the Android app. Render static sites are free to deploy, subject to the workspace's included bandwidth and build usage.
+
+1. In Render, choose **New → Static Site** and connect `diyaj14/paron`.
+2. Set the branch to `main`.
+3. Set **Root Directory** to `pwa/public`.
+4. Leave **Build Command** blank.
+5. Set **Publish Directory** to `.` and deploy.
+6. Open the generated `onrender.com` URL. The home page is the overview; its **Experience** buttons open `/demo.html`.
+7. For connected-backend mode, enter your public API gateway URL in the demo and make sure the API gateway's `CORS_ALLOWED_ORIGINS` includes the exact static-site origin. Keep secrets in backend environment settings; never put PayPal secrets in the website.
+
+The website's local simulation is available without backend services. Connected-backend mode needs the relevant services awake and correctly configured. PayPal Sandbox checkout appears only when the PayPal funding endpoints and public client ID are configured. The website demo's offline merchant handoff is still simulated in the browser; use the Android APK to show the real device flow.
 
 ## Verify the full flow
 
