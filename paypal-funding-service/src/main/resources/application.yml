@@ -29,6 +29,10 @@ ledger:
   base-url: ${LEDGER_SERVICE_URL:http://localhost:8082}
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+session-jwt:
+  public-key: ${JWT_PUBLIC_KEY:}
+  issuer: ${SESSION_JWT_ISSUER:paron-demo-auth}
+  audience: ${SESSION_JWT_AUDIENCE:paron-wallet}
 management:
   endpoints.web.exposure.include: health,info
 

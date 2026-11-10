@@ -46,7 +46,9 @@ public class FundingService {
         return FundingResponse.from(attempt, approvalUrl(response));
     }
 
-    public PaypalPublicConfig publicConfig() { return new PaypalPublicConfig(clientId, currency); }
+    public PaypalPublicConfig publicConfig() {
+        return new PaypalPublicConfig(clientId, currency, walletCreditRate, maximumAmount);
+    }
 
     /** Safe to retry: the ledger rejects a second credit for the same funding ID. */
     @Transactional(noRollbackFor = RuntimeException.class)

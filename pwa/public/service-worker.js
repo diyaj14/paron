@@ -1,4 +1,4 @@
-const CACHE = "paron-experience-v4";
+const CACHE = "paron-experience-v5";
 const ASSETS = ["./", "./index.html", "./landing.css", "./demo.html", "./styles.css", "./src/app.js", "./src/landing.js", "./manifest.webmanifest", "./icons/paron.svg", "./icons/paron-maskable.svg"];
 
 self.addEventListener("install", (event) => {

@@ -37,15 +37,8 @@
     });
   });
 
-  // --- 3. Hero Interactive Signal & Tap-to-Pay Simulator ---
-  const heroToggleSignal = document.getElementById('hero-toggle-signal');
-  const heroTriggerPay = document.getElementById('hero-trigger-pay');
-  const heroResetSim = document.getElementById('hero-reset-sim');
-  const heroSignalPill = document.getElementById('hero-signal-pill');
-  const heroSignalIcon = document.getElementById('hero-signal-icon');
-  const heroSignalText = document.getElementById('hero-signal-text');
-
-  // Customer phone elements
+  // --- 3. Homepage walkthrough: one click plays the full illustrated flow ---
+  const walkthroughButton = document.getElementById('play-home-walkthrough');
   const heroCustSignalBars = document.getElementById('hero-cust-signal-bars');
   const heroCustNetLabel = document.getElementById('hero-cust-net-label');
   const heroCustAmount = document.getElementById('hero-cust-amount');
@@ -62,203 +55,52 @@
   const heroMerchStatus = document.getElementById('hero-merch-status');
   const heroMerchDetail = document.getElementById('hero-merch-detail');
 
-  // Floating tags
-  const heroTagOne = document.getElementById('hero-tag-one');
-  const heroTagTwo = document.getElementById('hero-tag-two');
+  const walkthroughSteps = [
+    { step: '1', delay: 0, customer: ['₹500', 'SET ASIDE FOR OFFLINE USE', 'Allowance ready', 'Example only · no money moved', 'ACTIVE'], merchant: ['⌂', 'Waiting for payment', 'Coffee House · example merchant', 'No payment received yet'] },
+    { step: '2', delay: 1600, customer: ['₹500', 'AVAILABLE WITHOUT INTERNET', 'Spending limit saved', 'The example remains on this phone', 'OFFLINE'], merchant: ['⌂', 'Merchant is offline too', 'Coffee House · example merchant', 'Receipt can be checked later'] },
+    { step: '3', delay: 3300, customer: ['₹375', 'LEFT AFTER SAMPLE PURCHASE', 'Sample receipt created', '₹125 · Coffee House · example only', 'SAMPLE'], merchant: ['✓', 'Sample payment received', 'Coffee House · example merchant', '₹125 receipt · waiting to sync'] },
+    { step: '4', delay: 5100, customer: ['₹375', 'LEFT AFTER SAMPLE PURCHASE', 'Receipt checked after reconnect', 'Example flow complete · no real funds moved', 'DONE'], merchant: ['✓', 'Receipt check complete', 'Coffee House · example merchant', 'No bank transfer is shown'] }
+  ];
 
-  let isOffline = false;
-  let isPaid = false;
+  function animatePhoneText(element, value) {
+    if (!element) return;
+    element.classList.remove('phone-copy-change');
+    void element.offsetWidth;
+    element.textContent = value;
+    element.classList.add('phone-copy-change');
+  }
 
-  function updateHeroState() {
-    if (isPaid) {
-      // Payment completed state
-      if (heroCustAmount) heroCustAmount.textContent = '₹375';
-      if (heroCustAllowanceLabel) heroCustAllowanceLabel.textContent = 'LEFT AFTER THIS SAMPLE PAYMENT';
-      if (heroCustMeterBar) heroCustMeterBar.style.width = '75%';
-      if (heroCustPayButton) {
-        heroCustPayButton.textContent = '✓ Demo payment complete';
-        heroCustPayButton.classList.add('btn-paid');
-      }
-      if (heroCustStatusCard) {
-        heroCustStatusCard.innerHTML = `
-          <span class="pay-icon check-icon">✓</span>
-          <span><b>Sample receipt created</b><small>Website animation · not sent to a merchant</small></span>
-          <span class="check-pill">DEMO</span>
-        `;
-      }
-      if (heroMerchIcon) {
-        heroMerchIcon.innerHTML = '✓';
-        heroMerchIcon.className = 'merchant-icon merchant-icon-success';
-      }
-      if (heroMerchTitle) heroMerchTitle.textContent = 'Sample payment received';
-      if (heroMerchStatus) heroMerchStatus.textContent = 'Website simulation · not synced';
-      if (heroMerchDetail) heroMerchDetail.textContent = '₹125.00 · Coffee House';
-      if (heroTagOne) {
-        heroTagOne.innerHTML = '✓ &nbsp; Sample receipt created';
-        heroTagOne.className = 'float-tag tag-one tag-success';
-      }
-      if (heroTagTwo) {
-        heroTagTwo.innerHTML = 'ⓘ &nbsp; No real payment made';
-        heroTagTwo.className = 'float-tag tag-two tag-active';
-      }
-      if (heroTriggerPay) {
-        heroTriggerPay.disabled = true;
-        heroTriggerPay.textContent = '✓ Demo complete';
-      }
-      if (heroResetSim) heroResetSim.style.display = 'inline-flex';
-    } else if (isOffline) {
-      // Offline mode (Signal lost)
-      if (heroSignalPill) {
-        heroSignalPill.className = 'signal-pill pill-offline';
-        if (heroSignalIcon) heroSignalIcon.textContent = '📴';
-        if (heroSignalText) heroSignalText.textContent = 'Internet: Disconnected';
-      }
-      if (heroCustSignalBars) {
-        heroCustSignalBars.className = 'signal-bars signal-none';
-        heroCustSignalBars.innerHTML = '<span></span><span></span><span></span><span></span><i>✕</i>';
-      }
-      if (heroCustNetLabel) heroCustNetLabel.textContent = 'INTERNET DISCONNECTED';
-      if (heroCustAmount) heroCustAmount.textContent = '₹500';
-      if (heroCustAllowanceLabel) heroCustAllowanceLabel.textContent = 'AMOUNT SET ASIDE FOR OFFLINE';
-      if (heroCustMeterBar) heroCustMeterBar.style.width = '100%';
-      if (heroCustPayButton) {
-        heroCustPayButton.textContent = 'Simulate ₹125 payment';
-        heroCustPayButton.classList.remove('btn-paid');
-      }
-      if (heroCustStatusCard) {
-        heroCustStatusCard.innerHTML = `
-          <span class="pay-icon">↗</span>
-          <span><b>Sample allowance ready</b><small>Available in this illustration</small></span>
-          <span class="check-pill">DEMO</span>
-        `;
-      }
-      if (heroMerchIcon) {
-        heroMerchIcon.innerHTML = '⌁';
-        heroMerchIcon.className = 'merchant-icon';
-      }
-      if (heroMerchTitle) heroMerchTitle.textContent = 'Waiting for sample payment';
-      if (heroMerchStatus) heroMerchStatus.textContent = 'Website simulation · no Bluetooth';
-      if (heroMerchDetail) heroMerchDetail.textContent = 'A real merchant phone is not connected';
-      if (heroTagOne) {
-        heroTagOne.innerHTML = '📴 &nbsp; Internet disconnected';
-        heroTagOne.className = 'float-tag tag-one tag-warning';
-      }
-      if (heroTagTwo) {
-        heroTagTwo.innerHTML = '🔒 &nbsp; ₹500 sample limit';
-        heroTagTwo.className = 'float-tag tag-two';
-      }
-      if (heroTriggerPay) {
-        heroTriggerPay.disabled = false;
-        heroTriggerPay.textContent = '⚡ Simulate a ₹125 payment';
-      }
-      if (heroToggleSignal) {
-        heroToggleSignal.textContent = '🟢 Restore internet';
-      }
-    } else {
-      // Normal online state
-      if (heroSignalPill) {
-        heroSignalPill.className = 'signal-pill pill-online';
-        if (heroSignalIcon) heroSignalIcon.textContent = '🟢';
-        if (heroSignalText) heroSignalText.textContent = 'Connection: Online';
-      }
-      if (heroCustSignalBars) {
-        heroCustSignalBars.className = 'signal-bars signal-full';
-        heroCustSignalBars.innerHTML = '<span></span><span></span><span></span><span></span>';
-      }
-      if (heroCustNetLabel) heroCustNetLabel.textContent = 'WALLET · ONLINE';
-      if (heroCustAmount) heroCustAmount.textContent = '₹500';
-      if (heroCustAllowanceLabel) heroCustAllowanceLabel.textContent = 'RESERVED OFFLINE ALLOWANCE';
-      if (heroCustMeterBar) heroCustMeterBar.style.width = '100%';
-      if (heroCustPayButton) {
-        heroCustPayButton.textContent = 'Simulate a ₹125 payment';
-        heroCustPayButton.classList.remove('btn-paid');
-      }
-      if (heroCustStatusCard) {
-        heroCustStatusCard.innerHTML = `
-          <span class="pay-icon">↗</span>
-          <span><b>Sample allowance set aside</b><small>Example only · no money moved</small></span>
-          <span class="check-pill">DEMO</span>
-        `;
-      }
-      if (heroMerchIcon) {
-        heroMerchIcon.innerHTML = '⌂';
-        heroMerchIcon.className = 'merchant-icon';
-      }
-      if (heroMerchTitle) heroMerchTitle.textContent = 'Terminal Idle';
-      if (heroMerchStatus) heroMerchStatus.textContent = 'Coffee House · Terminal #1';
-      if (heroMerchDetail) heroMerchDetail.textContent = 'Website illustration · no Bluetooth';
-      if (heroTagOne) {
-        heroTagOne.innerHTML = '⌁ &nbsp; Internet connected';
-        heroTagOne.className = 'float-tag tag-one';
-      }
-      if (heroTagTwo) {
-        heroTagTwo.innerHTML = '✓ &nbsp; Example limit: ₹500';
-        heroTagTwo.className = 'float-tag tag-two';
-      }
-      if (heroTriggerPay) {
-        heroTriggerPay.disabled = false;
-        heroTriggerPay.textContent = '⚡ Simulate a ₹125 payment';
-      }
-      if (heroToggleSignal) {
-        heroToggleSignal.textContent = '📴 Simulate internet loss';
-      }
-      if (heroResetSim) heroResetSim.style.display = 'none';
+  function showWalkthroughStep(item) {
+    if (heroCustAmount) animatePhoneText(heroCustAmount, item.customer[0]);
+    if (heroCustAllowanceLabel) animatePhoneText(heroCustAllowanceLabel, item.customer[1]);
+    if (heroCustPayButton) animatePhoneText(heroCustPayButton, item.customer[2]);
+    if (heroCustMeterBar) heroCustMeterBar.style.width = item.step === '3' || item.step === '4' ? '75%' : '100%';
+    if (heroCustStatusCard) {
+      heroCustStatusCard.innerHTML = `<span class="pay-icon">${item.step === '3' || item.step === '4' ? '✓' : '↗'}</span><span><b>${item.customer[2]}</b><small>${item.customer[3]}</small></span><span class="check-pill">${item.customer[4]}</span>`;
+      heroCustStatusCard.classList.remove('phone-copy-change'); void heroCustStatusCard.offsetWidth; heroCustStatusCard.classList.add('phone-copy-change');
     }
+    if (heroCustNetLabel) animatePhoneText(heroCustNetLabel, item.step === '2' || item.step === '3' ? 'WALLET · OFFLINE' : 'WALLET · RECONNECTED');
+    if (heroCustSignalBars) heroCustSignalBars.className = `signal-bars ${item.step === '2' || item.step === '3' ? 'signal-none' : 'signal-full'}`;
+    if (heroMerchIcon) { heroMerchIcon.textContent = item.merchant[0]; heroMerchIcon.className = `merchant-icon${item.step === '3' || item.step === '4' ? ' merchant-icon-success' : ''}`; }
+    if (heroMerchTitle) animatePhoneText(heroMerchTitle, item.merchant[1]);
+    if (heroMerchStatus) animatePhoneText(heroMerchStatus, item.merchant[2]);
+    if (heroMerchDetail) animatePhoneText(heroMerchDetail, item.merchant[3]);
+    if (item.step === '3' && heroRippleWave) { heroRippleWave.classList.remove('active'); void heroRippleWave.offsetWidth; heroRippleWave.classList.add('active'); }
+    activateStep(item.step);
   }
 
-  if (heroToggleSignal) {
-    heroToggleSignal.addEventListener('click', () => {
-      isOffline = !isOffline;
-      if (!isOffline) isPaid = false;
-      updateHeroState();
-    });
-  }
-
-  function triggerPaymentAnimation() {
-    if (isPaid) return;
-    // Activate ripple wave
-    if (heroRippleWave) {
-      heroRippleWave.classList.remove('active');
-      void heroRippleWave.offsetWidth; // trigger reflow
-      heroRippleWave.classList.add('active');
-    }
-
-    if (heroCustPayButton) {
-      heroCustPayButton.textContent = 'Creating sample receipt…';
-    }
-
-    setTimeout(() => {
-      isPaid = true;
-      updateHeroState();
-    }, 600);
-  }
-
-  if (heroTriggerPay) {
-    heroTriggerPay.addEventListener('click', () => {
-      if (!isOffline) {
-        // Automatically drop signal and then pay to show the offline magic!
-        isOffline = true;
-        updateHeroState();
-        setTimeout(triggerPaymentAnimation, 400);
-      } else {
-        triggerPaymentAnimation();
-      }
-    });
-  }
-
-  if (heroCustPayButton) {
-    heroCustPayButton.addEventListener('click', () => {
-      if (!isPaid) triggerPaymentAnimation();
-    });
-  }
-
-  if (heroResetSim) {
-    heroResetSim.addEventListener('click', () => {
-      isPaid = false;
-      isOffline = false;
-      updateHeroState();
-    });
-  }
+  let walkthroughTimers = [];
+  if (walkthroughButton) walkthroughButton.addEventListener('click', () => {
+    walkthroughTimers.forEach(clearTimeout);
+    walkthroughTimers = [];
+    walkthroughButton.disabled = true;
+    walkthroughButton.innerHTML = 'Playing the walkthrough… <span>↻</span>';
+    walkthroughSteps.forEach((item) => walkthroughTimers.push(setTimeout(() => showWalkthroughStep(item), item.delay)));
+    walkthroughTimers.push(setTimeout(() => {
+      walkthroughButton.disabled = false;
+      walkthroughButton.innerHTML = 'Replay the walkthrough <span>↻</span>';
+    }, 6800));
+  });
 
   // --- 4. Interactive Allowance Allocation Slider (Bento Grid) ---
   const allowanceSlider = document.getElementById('allowance-slider');
@@ -397,9 +239,18 @@
   });
 
   // --- 8. Initial Setup ---
-  updateHeroState();
   updateAllowanceSlider(500);
   activateStep('1');
+
+  // Fade text and cards into view as the visitor scrolls, with a reduced-motion fallback.
+  const revealTargets = document.querySelectorAll('.hero-copy > *, .section-heading, .about-copy > *, .flow-step-item, .bento-card, .faq-item, .preview-copy > *, .screen-placeholder');
+  if ('IntersectionObserver' in window && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    revealTargets.forEach((element) => element.classList.add('reveal-on-scroll'));
+    const revealObserver = new IntersectionObserver((entries, observer) => entries.forEach((entry) => {
+      if (entry.isIntersecting) { entry.target.classList.add('is-visible'); observer.unobserve(entry.target); }
+    }), { threshold: 0.12 });
+    revealTargets.forEach((element) => revealObserver.observe(element));
+  }
 
   // Keep the landing page and its demo assets available as an installable PWA.
   if ('serviceWorker' in navigator) {

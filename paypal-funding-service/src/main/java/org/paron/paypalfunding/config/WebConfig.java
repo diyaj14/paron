@@ -15,7 +15,7 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addMapping("/api/funding/**")
                 .allowedOrigins(allowedOrigins.split(","))
                 .allowedMethods("GET", "POST")
-                .allowedHeaders("Content-Type")
+                .allowedHeaders("Authorization", "Content-Type")
                 .maxAge(3600);
     }
 }

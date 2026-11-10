@@ -1,7 +1,7 @@
 /* Judge-facing Paron walkthrough. Browser simulation and backend mode are kept distinct. */
 const $ = (id) => document.getElementById(id);
 const dbKey = "paron-judge-demo-v2";
-const state = { backend: false, online: true, connected: false, merchantConnected: false, session: "", token: null, transactions: [], total: 1000, backendMerchantBalance: null, paypalLoaded: false };
+const state = { backend: false, online: true, connected: false, merchantConnected: false, session: "", token: null, transactions: [], total: 1000, backendMerchantBalance: null, paypalLoaded: false, pendingReserve: null };
 const apiBase = () => $("api-base").value.trim().replace(/\/$/, "");
 const userId = () => $("user-id").value.trim() || "demo-customer";
 const money = (n) => `₹${Number(n || 0).toFixed(2)}`;
@@ -16,7 +16,7 @@ async function api(path, init = {}) {
   const response = await fetch(`${apiBase()}${path}`, { ...init, headers: headers(init.headers || {}) });
   const text = await response.text();
   let data = null; try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-  if (!response.ok) throw new Error(`The online service could not complete that request (${response.status}). Try again later.`);
+  if (!response.ok) throw new Error(data?.message || data?.detail || `The online service could not complete that request (${response.status}). Try again later.`);
   return { response, data };
 }
 function updateNetwork() {
@@ -69,7 +69,9 @@ function render() {
   $("receipt-count").textContent = String(merchantTx.length);
   $("merchant-inbox").innerHTML = merchantTx.length ? merchantTx.slice().reverse().map(t => `<div class="inbox-receipt"><span class="receipt-icon">✓</span><div><strong>${escapeHtml(t.statusLabel || (t.state === "SETTLED" ? "Added to merchant account" : "Received offline"))}</strong><small>${escapeHtml(t.id.slice(0,8))} · ${t.state === "SETTLED" ? "Confirmed online" : "Receipt saved in this browser"}</small></div><span class="receipt-amount">${money(t.amount)}</span></div>`).join("") : '<div class="empty-inbox"><span>⌁</span><p>Payment receipts will appear here.</p></div>';
   $("transactions").innerHTML = state.transactions.length ? state.transactions.slice().reverse().map(t => `<article class="transaction"><div><strong>${money(t.amount)} → ${escapeHtml(t.merchantName)}</strong><small>${new Date(t.createdAt).toLocaleString()} · ${escapeHtml(t.id.slice(0,8))}${t.reason ? ` · ${escapeHtml(t.reason)}` : ""}</small></div><span class="tx-badge-group ${t.state === "SETTLED" ? "settled" : ""}">${escapeHtml(t.stateLabel || t.state)}</span></article>`).join("") : '<p class="empty-inbox">No transactions yet.</p>';
-  $("request-token").disabled = state.backend && !state.session;
+  $("request-token").disabled = (state.backend && !state.session) || Boolean(state.pendingReserve && !state.pendingReserve.funded);
+  $("new-token-amount").disabled = Boolean(state.pendingReserve?.funded);
+  $("expiry-hours").disabled = Boolean(state.pendingReserve?.funded);
   $("sync-now").disabled = !pending.length || !state.online || (state.backend && !state.session);
 }
 function run(action) { return async () => { try { await action(); } catch (e) { console.error(e); notify(e.message || "Action failed."); render(); } }; }
@@ -103,16 +105,59 @@ async function reserve() {
   if (!(amount > 0)) throw new Error("Enter a valid allowance amount.");
   if (state.backend) {
     if (!state.session) throw new Error("Sign in to the demo account before setting an offline limit.");
-    const {data} = await api("/api/v1/tokens/gettoken", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({userId:userId(),deviceId:`web-demo-${getDeviceId()}`,amount,expiryHours:hours}) });
-    state.token = normalizeToken(data,amount,hours);
-    state.total=Number(data.totalBalance ?? state.total);
-    notify(`Backend set aside ${money(amount)} for offline spending.`);
+    if (state.pendingReserve?.funded && state.pendingReserve.amount === amount && state.pendingReserve.hours === hours) {
+      await issueReservation(amount, hours);
+      return;
+    }
+    const {data:config}=await api("/api/funding/paypal/config");
+    if (!config.clientId) throw new Error("PayPal Sandbox is not configured on the funding service.");
+    const rate=Number(config.walletCreditRate), maximum=Number(config.maximumAmount);
+    if (!(rate > 0)) throw new Error("Funding service did not provide its wallet conversion rate.");
+    const usdAmount=Math.ceil((amount/rate)*100)/100;
+    if (Number.isFinite(maximum) && usdAmount > maximum) throw new Error(`This allowance needs $${usdAmount.toFixed(2)} in PayPal Sandbox funding, above the service limit of $${maximum.toFixed(2)}.`);
+    if (state.pendingReserve && (state.pendingReserve.amount !== amount || state.pendingReserve.hours !== hours)) throw new Error("Finish or cancel the current PayPal checkout before changing the allowance.");
+    if (!state.pendingReserve) state.pendingReserve={amount,hours,usdAmount,funded:false,orderId:null};
+    await ensurePayPalSdk(config);
+    const box=$("paypal-button-container");
+    box.innerHTML="";
+    $("paypal-status").textContent=`Approve a $${usdAmount.toFixed(2)} PayPal Sandbox payment (about ${money(usdAmount*rate)}). After capture, Paron will set aside ${money(amount)}.`;
+    await window.paypal.Buttons({
+      createOrder:async()=>{
+        if (state.pendingReserve.orderId) return state.pendingReserve.orderId;
+        const {data}=await api("/api/funding/paypal/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({amount:usdAmount})});
+        state.pendingReserve.orderId=data.paypalOrderId;
+        return state.pendingReserve.orderId;
+      },
+      onApprove:async(data)=>{
+        $("paypal-status").textContent="PayPal approved. Confirming the test payment and setting the allowance aside…";
+        const {data:captured}=await api(`/api/funding/paypal/orders/${encodeURIComponent(data.orderID)}/capture`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+        if (String(captured.status||"").toUpperCase() !== "CREDITED") throw new Error("PayPal captured the payment, but Paron has not confirmed the wallet credit. Retry after checking the funding service.");
+        state.pendingReserve.funded=true;
+        try { const {data:balance}=await api(`/api/v1/ledger/balance/${encodeURIComponent(userId())}`); state.total=Number(balance.totalBalance??state.total); } catch {}
+        try { await issueReservation(amount,hours); $("paypal-status").textContent="PayPal Sandbox payment confirmed and offline allowance reserved."; }
+        catch (error) { render(); $("paypal-status").textContent=`Wallet funding succeeded, but allowance reservation failed: ${error.message} Click “Set offline spending limit” again to retry reservation without charging PayPal again.`; notify($("paypal-status").textContent); throw error; }
+      },
+      onCancel:()=>{ state.pendingReserve=null; $("paypal-status").textContent="PayPal checkout cancelled. No allowance was reserved."; render(); },
+      onError:error=>{ console.error("PayPal reserve checkout failed",error); if (!state.pendingReserve?.orderId) state.pendingReserve=null; $("paypal-status").textContent="PayPal checkout could not finish. If PayPal already approved it, press the reserve button again to retry safely."; render(); }
+    }).render(box);
+    box.scrollIntoView({behavior:"smooth",block:"center"});
+    notify("PayPal Sandbox checkout is ready. Approve the test payment to fund and reserve this allowance.");
   } else {
     state.connected = true;
     state.token={tokenId:crypto.randomUUID(),token:`paron-sim-${crypto.randomUUID()}`,maxAmount:amount,expiresAt:new Date(Date.now()+hours*3600000).toISOString(),status:"ACTIVE"};
     notify(`Sample limit set to ${money(amount)}. No backend record was created.`);
   }
   save(); render();
+}
+async function issueReservation(amount,hours) {
+  const {data}=await api("/api/v1/tokens/gettoken",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:userId(),deviceId:`web-demo-${getDeviceId()}`,amount,expiryHours:hours})});
+  state.token=normalizeToken(data,amount,hours);
+  state.total=Number(data.totalBalance??state.total);
+  state.pendingReserve=null;
+  $("paypal-button-container").innerHTML="";
+  $("paypal-status").textContent=state.backend ? "PayPal Sandbox funding confirmed and offline allowance reserved." : "";
+  notify(`PayPal Sandbox funding confirmed. Backend set aside ${money(amount)} for offline spending.`);
+  save();render();
 }
 function getDeviceId(){let id=localStorage.getItem("paron-judge-device");if(!id){id=crypto.randomUUID();localStorage.setItem("paron-judge-device",id)}return id}
 async function connectMerchant(){state.merchantConnected=true;notify("Merchant view is ready. This website simulates the nearby handoff.");$("ble-status").textContent="Website simulation · no Bluetooth connection or Android secure hardware is used.";}
@@ -171,14 +216,13 @@ async function syncBackend(pending){
   notify($("sync-timeline-status").textContent);render();
 }
 async function sync(){if(!state.online||!navigator.onLine)throw new Error("Reconnect before syncing receipts.");const pending=state.transactions.filter(t=>t.sourceMode===(state.backend?"backend":"simulation")&&!["SETTLED","SIMULATED","REJECTED","FAILED"].includes(t.state));if(!pending.length)throw new Error("No pending receipts to sync in the selected mode.");if(state.backend)await syncBackend(pending);else await syncSimulation(pending);}
-async function loadPayPal(){
-  if(!state.backend)throw new Error("Switch to backend mode before trying PayPal’s test checkout.");if(!state.session)throw new Error("Sign in to the demo account first.");
-  const {data:config}=await api("/api/funding/paypal/config");if(!config.clientId)throw new Error("PayPal test checkout is not configured on the backend yet.");
-  if(!window.paypal){await new Promise((resolve,reject)=>{const s=document.createElement("script");s.src=`https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(config.clientId)}&currency=${encodeURIComponent(config.currency||"USD")}&intent=capture`;s.onload=resolve;s.onerror=()=>reject(new Error("Could not load PayPal Sandbox checkout."));document.head.appendChild(s);});}
-  const box=$("paypal-button-container");box.innerHTML="";
-  window.paypal.Buttons({createOrder:async()=>{const amount=Number($("paypal-funding-amount").value||10);const {data}=await api("/api/funding/paypal/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({amount})});return data.paypalOrderId;},onApprove:async(data)=>{await api(`/api/funding/paypal/orders/${encodeURIComponent(data.orderID)}/capture`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});$("paypal-status").textContent="PayPal Sandbox capture confirmed by funding backend. Refresh account balance to see ledger changes.";try{const {data:b}=await api(`/api/v1/ledger/balance/${encodeURIComponent(userId())}`);state.total=Number(b.totalBalance??state.total);render();}catch{}notify("PayPal Sandbox capture returned successfully.");},onError:err=>{console.error(err);$("paypal-status").textContent="PayPal did not complete. Check funding service logs.";}}).render(box);
-  $("paypal-status").textContent="PayPal test checkout is ready. Approve using a PayPal Sandbox buyer account.";
+async function ensurePayPalSdk(config){
+  if(window.paypal)return;
+  if(state.paypalLoaded)throw new Error("PayPal checkout is still loading. Try again in a moment.");
+  state.paypalLoaded=true;
+  try { await new Promise((resolve,reject)=>{const s=document.createElement("script");s.src=`https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(config.clientId)}&currency=${encodeURIComponent(config.currency||"USD")}&intent=capture`;s.onload=resolve;s.onerror=()=>reject(new Error("Could not load PayPal Sandbox checkout."));document.head.appendChild(s);}); }
+  catch(error){state.paypalLoaded=false;throw error;}
 }
 function restore(){try{const d=JSON.parse(localStorage.getItem(dbKey)||"{}");state.token=d.token||null;state.transactions=d.transactions||[];state.total=d.total??1000;state.merchantSettled=d.merchantSettled||0;}catch{}}
-function init(){restore();$("backend-mode").addEventListener("change",e=>{state.backend=e.target.checked;state.session="";state.token=null;state.total=1000;$("session-token").value="";save();updateMode();notify(state.backend?"Backend mode selected. Enter the API gateway URL, connect the account, then reserve a backend token.":"Simulation mode selected. Reserve a sample allowance to continue.");});$("demo-sign-in").addEventListener("click",run(signIn));$("request-token").addEventListener("click",run(reserve));$("connect-merchant").addEventListener("click",run(connectMerchant));$("pay").addEventListener("click",run(payOffline));$("sync-now").addEventListener("click",run(sync));$("load-paypal").addEventListener("click",run(loadPayPal));$("payment-amount").addEventListener("input",render);$("merchant-picker").addEventListener("change",e=>{$("merchant-id").value=e.target.value;render();});$("demo-network-toggle").addEventListener("click",()=>{state.online=!state.online;notify(state.online?"Network restored. Ready to sync pending receipts.":"Offline simulation active. Online services are unavailable.");render();});window.addEventListener("online",()=>{state.online=true;render();});window.addEventListener("offline",()=>{state.online=false;render();});if("serviceWorker"in navigator)navigator.serviceWorker.register("./service-worker.js").catch(()=>{});updateMode();render();}
+function init(){restore();$("backend-mode").addEventListener("change",e=>{state.backend=e.target.checked;state.session="";state.token=null;state.total=1000;state.pendingReserve=null;$("paypal-button-container").innerHTML="";$("session-token").value="";save();updateMode();notify(state.backend?"Backend mode selected. Enter the API gateway URL, connect the account, then reserve a backend token.":"Simulation mode selected. Reserve a sample allowance to continue.");});$("demo-sign-in").addEventListener("click",run(signIn));$("request-token").addEventListener("click",run(reserve));$("connect-merchant").addEventListener("click",run(connectMerchant));$("pay").addEventListener("click",run(payOffline));$("sync-now").addEventListener("click",run(sync));$("payment-amount").addEventListener("input",render);$("merchant-picker").addEventListener("change",e=>{$("merchant-id").value=e.target.value;render();});$("demo-network-toggle").addEventListener("click",()=>{state.online=!state.online;notify(state.online?"Network restored. Ready to sync pending receipts.":"Offline simulation active. Online services are unavailable.");render();});window.addEventListener("online",()=>{state.online=true;render();});window.addEventListener("offline",()=>{state.online=false;render();});if("serviceWorker"in navigator)navigator.serviceWorker.register("./service-worker.js").catch(()=>{});updateMode();render();}
 window.addEventListener("DOMContentLoaded",init);
