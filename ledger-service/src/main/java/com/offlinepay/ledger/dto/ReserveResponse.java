@@ -19,5 +19,7 @@ import java.math.BigDecimal;
 public class ReserveResponse {
     private String reservationId;
     private BigDecimal reservedAmount;
+    private BigDecimal settledAmount;
     private BigDecimal remainingAvailableBalance;
+    private boolean reusedExisting;
 }

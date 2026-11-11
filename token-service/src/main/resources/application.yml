@@ -42,6 +42,9 @@ spring:
 offline-token:
   signing-secret: ${OFFLINE_TOKEN_SIGNING_SECRET}
   issuer: ${OFFLINE_TOKEN_ISSUER:paron-offline-token}
+  # Judge demo allows an authenticated user to use the active token on another device.
+  # Set OFFLINE_TOKEN_DEVICE_BINDING_REQUIRED=true for production deployments.
+  device-binding-required: ${OFFLINE_TOKEN_DEVICE_BINDING_REQUIRED:false}
 jwt:
   # How long (hours) an offline spending token stays valid before auto-expiring
   offline-token-expiry-hours: 6

@@ -246,7 +246,9 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onAmountChange = viewModel::setPaymentAmount,
                     onNoteChange = viewModel::setPaymentNote,
                     pairedDevices = viewModel.bluetoothManager.getPairedDevices(),
-                    onGetToken = { navController.navigate("wallet") },
+                    onReserveAndContinue = { continuePayment ->
+                        viewModel.reserveOfflineForPayment(state.paymentAmount, continuePayment)
+                    },
                     onPayQr = {
                         if (viewModel.saveOfflinePayment()) navController.navigate("success")
                     },
@@ -278,6 +280,7 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                 WalletScreen(
                     state = state,
                     onReserve = viewModel::reserveOffline,
+                onRecoverToken = viewModel::recoverActiveTokenOnThisDevice,
                     onSync = viewModel::syncNow,
                     onSetServerUrl = viewModel::setServerBaseUrl,
                     onTransfer = viewModel::refreshBalancesFromBackend,

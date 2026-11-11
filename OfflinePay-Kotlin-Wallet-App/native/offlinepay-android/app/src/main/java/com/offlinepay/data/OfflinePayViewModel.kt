@@ -193,12 +193,18 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                         restoredToken.tokenId == current.activeTokenId && current.activeOfflineToken != null
                     current.copy(
                         onlineBalance = bal.availableBalance.toInt(),
+                        remoteTokenRemaining = restoredToken?.let {
+                            (it.maxAmount - it.spentAmount).toInt().coerceAtLeast(0)
+                        },
                         offlineBalance = when {
-                            restoredToken != null && !isSameToken -> restoredToken.maxAmount.toInt()
+                            restoredToken != null && restoredToken.token == null -> 0
+                            restoredToken != null && restoredToken.token != null && !isSameToken -> (restoredToken.maxAmount - restoredToken.spentAmount).toInt().coerceAtLeast(0)
                             restoredToken != null -> current.offlineBalance
-                            activeTokenResult.isSuccess -> bal.reservedAmount.toInt()
+                            // Ledger reservations without a token returned for this device are locked,
+                            // but cannot be spent from this screen.
+                            activeTokenResult.isSuccess -> 0
                             current.activeOfflineToken != null -> current.offlineBalance
-                            else -> bal.reservedAmount.toInt()
+                            else -> 0
                         },
                         activeOfflineToken = restoredToken?.token
                             ?: if (activeTokenResult.isSuccess) null else current.activeOfflineToken,
@@ -258,6 +264,49 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
      * and returns the signed JWT offline token.
      */
     fun reserveOffline(amountText: String) {
+        reserveOfflineInternal(amountText, afterReserved = null)
+    }
+
+    fun reserveOfflineForPayment(amountText: String, afterReserved: () -> Unit) {
+        reserveOfflineInternal(amountText, afterReserved)
+    }
+
+    fun recoverActiveTokenOnThisDevice() {
+        val state = _uiState.value
+        if (!state.internetAvailable) {
+            _uiState.update { it.copy(message = "Connect to the internet to recover your active token.") }
+            return
+        }
+        if (state.phoneNumber.isBlank()) {
+            _uiState.update { it.copy(message = "Sign in before recovering your active token.") }
+            return
+        }
+        _uiState.update { it.copy(isReserving = true, message = "Recovering active offline token...") }
+        viewModelScope.launch {
+            apiClient.recoverActiveOfflineToken(state.phoneNumber, getDeviceId())
+                .onSuccess { token ->
+                    val remaining = (token.maxAmount - token.spentAmount).toInt().coerceAtLeast(0)
+                    val updated = _uiState.value.copy(
+                        isReserving = false,
+                        activeOfflineToken = token.token,
+                        activeTokenId = token.tokenId,
+                        tokenExpiresAt = token.expiresAt,
+                        offlineBalance = remaining,
+                        remoteTokenRemaining = remaining,
+                        message = "₹$remaining token recovered. The previous device's token is now invalid. Sync its pending payments before using this device."
+                    )
+                    _uiState.value = updated
+                    persistState(updated)
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(isReserving = false, message = "Could not recover active token: ${error.message}")
+                    }
+                }
+        }
+    }
+
+    private fun reserveOfflineInternal(amountText: String, afterReserved: (() -> Unit)?) {
         val amount = amountText.toDoubleOrNull()
         val state = _uiState.value
 
@@ -266,21 +315,71 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
 
-        if (amount > state.onlineBalance) {
-            _uiState.update { it.copy(message = "Amount exceeds available balance (₹${state.onlineBalance}).") }
+        if (!state.internetAvailable) {
+            _uiState.update { it.copy(message = "Internet connection required to request a token from the backend.") }
             return
         }
 
-        if (!state.internetAvailable) {
-            _uiState.update { it.copy(message = "Internet connection required to request a token from the backend.") }
+        val userId = state.phoneNumber
+        if (userId.isBlank()) {
+            _uiState.update { it.copy(message = "Sign in before reserving an offline token.") }
             return
         }
 
         _uiState.update { it.copy(isReserving = true, message = "Requesting offline token from backend...") }
 
         viewModelScope.launch {
-            val userId = state.phoneNumber.ifBlank { return@launch }
             val deviceId = getDeviceId()
+
+            // Token-service is authoritative; local cached state may be stale.
+            val activeResult = apiClient.fetchActiveOfflineToken(userId, deviceId)
+            if (activeResult.isFailure) {
+                _uiState.update {
+                    it.copy(
+                        isReserving = false,
+                        message = "Could not check for an active token: ${activeResult.exceptionOrNull()?.message}"
+                    )
+                }
+                return@launch
+            }
+            val existingToken = activeResult.getOrNull()
+            if (existingToken != null) {
+                if (existingToken.token.isNullOrBlank()) {
+                    val blocked = _uiState.value.copy(
+                        isReserving = false,
+                        activeOfflineToken = null,
+                        activeTokenId = existingToken.tokenId,
+                        tokenExpiresAt = existingToken.expiresAt,
+                        offlineBalance = 0,
+                        message = "An active token is assigned to another device. Review the recovery option in Wallet before paying here."
+                    )
+                    _uiState.value = blocked
+                    persistState(blocked)
+                    return@launch
+                }
+                val remaining = (existingToken.maxAmount - existingToken.spentAmount).coerceAtLeast(0.0)
+                val restored = _uiState.value.copy(
+                    isReserving = false,
+                    activeOfflineToken = existingToken.token,
+                    activeTokenId = existingToken.tokenId,
+                    tokenExpiresAt = existingToken.expiresAt,
+                    offlineBalance = remaining.toInt(),
+                    message = if (afterReserved == null) {
+                        "Your active offline token is ready. ₹${remaining.toInt()} remains."
+                    } else null
+                )
+                _uiState.value = restored
+                persistState(restored)
+                if (afterReserved != null) afterReserved()
+                return@launch
+            }
+
+            if (amount > _uiState.value.onlineBalance) {
+                _uiState.update {
+                    it.copy(isReserving = false, message = "Amount exceeds available balance (₹${it.onlineBalance}).")
+                }
+                return@launch
+            }
 
             val result = apiClient.requestOfflineToken(
                 userId = userId,
@@ -290,28 +389,42 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             )
 
             result.onSuccess { tokenRes ->
-                val newOffline = tokenRes.maxAmount.toInt()
+                val newOffline = (tokenRes.maxAmount - tokenRes.spentAmount).toInt().coerceAtLeast(0)
                 val reserveTxn = WalletTransaction(
                     id = "res-" + UUID.randomUUID().toString().take(8),
-                    merchant = "Bank Ledger Reserve",
-                    amountRupees = amount,
-                    method = "Token Allocation",
+                    merchant = if (tokenRes.reservationRecovered) "Existing Offline Reserve" else "Bank Ledger Reserve",
+                    amountRupees = if (tokenRes.reservationRecovered) tokenRes.maxAmount else amount,
+                    method = if (tokenRes.reservationRecovered) "Token Recovery" else "Token Allocation",
                     dateLabel = currentFormattedTime(),
                     status = TransactionStatus.COMPLETED
                 )
 
-                val updated = state.copy(
+                val current = _uiState.value
+                val updated = current.copy(
                     isReserving = false,
                     activeOfflineToken = tokenRes.token,
                     activeTokenId = tokenRes.tokenId,
                     tokenExpiresAt = tokenRes.expiresAt,
                     offlineBalance = newOffline,
-                    transactions = listOf(reserveTxn) + state.transactions,
-                    message = "₹${amount.toInt()} reserved! Token issued from backend for offline spending."
+                    onlineBalance = if (tokenRes.reservationRecovered) current.onlineBalance
+                        else (current.onlineBalance - amount).toInt().coerceAtLeast(0),
+                    transactions = listOf(reserveTxn) + current.transactions,
+                    message = if (afterReserved == null) {
+                        if (tokenRes.reservationRecovered) {
+                            "Recovered your existing ₹${newOffline} offline reservation. No extra funds were locked."
+                        } else {
+                            "₹${amount.toInt()} reserved! Token issued from backend for offline spending."
+                        }
+                    } else null
                 )
                 _uiState.value = updated
                 persistState(updated)
-                refreshBalancesFromBackend()
+                if (afterReserved != null) {
+                    afterReserved()
+                    if (tokenRes.reservationRecovered) refreshBalancesFromBackend()
+                } else {
+                    refreshBalancesFromBackend()
+                }
             }.onFailure { err ->
                 _uiState.update {
                     it.copy(
@@ -837,6 +950,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             authenticated = false,
             onlineBalance = demoStore.getInt(KEY_ONLINE_BALANCE, defaultState.onlineBalance),
             offlineBalance = demoStore.getInt(KEY_OFFLINE_BALANCE, defaultState.offlineBalance),
+            remoteTokenRemaining = demoStore.getInt(KEY_REMOTE_TOKEN_REMAINING, -1).takeIf { it >= 0 },
             activeOfflineToken = demoStore.getString(KEY_OFFLINE_TOKEN, null),
             activeTokenId = demoStore.getString(KEY_TOKEN_ID, null),
             tokenExpiresAt = demoStore.getString(KEY_TOKEN_EXPIRES, null),
@@ -871,6 +985,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             .putString(KEY_PHONE_NUMBER, state.phoneNumber)
             .putInt(KEY_ONLINE_BALANCE, state.onlineBalance)
             .putInt(KEY_OFFLINE_BALANCE, state.offlineBalance)
+            .putInt(KEY_REMOTE_TOKEN_REMAINING, state.remoteTokenRemaining ?: -1)
             .putString(KEY_OFFLINE_TOKEN, state.activeOfflineToken)
             .putString(KEY_TOKEN_ID, state.activeTokenId)
             .putString(KEY_TOKEN_EXPIRES, state.tokenExpiresAt)
@@ -910,6 +1025,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
         private const val KEY_PHONE_NUMBER = "user_phone"
         private const val KEY_ONLINE_BALANCE = "online_balance"
         private const val KEY_OFFLINE_BALANCE = "offline_balance"
+        private const val KEY_REMOTE_TOKEN_REMAINING = "remote_token_remaining"
         private const val KEY_OFFLINE_TOKEN = "active_offline_token"
         private const val KEY_TOKEN_ID = "active_token_id"
         private const val KEY_TOKEN_EXPIRES = "token_expires_at"

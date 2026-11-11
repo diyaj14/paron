@@ -398,7 +398,7 @@ fun OfflinePaymentScreen(
     onAmountChange: (String) -> Unit,
     onNoteChange: (String) -> Unit,
     pairedDevices: List<BluetoothDevice>,
-    onGetToken: () -> Unit,
+    onReserveAndContinue: (onReserved: () -> Unit) -> Unit,
     onPayQr: () -> Unit,
     onPayBluetooth: (BluetoothDevice) -> Unit
 ) {
@@ -614,9 +614,14 @@ fun OfflinePaymentScreen(
                     PrimaryAction(
                         text = if (selectedDevice != null) "Pay ₹${state.paymentAmount} via Bluetooth to ${selectedDevice?.name ?: "Phone"}" else "Select Device to Pay",
                         onClick = {
-                            selectedDevice?.let(onPayBluetooth)
+                            if (state.activeOfflineToken == null) {
+                                onReserveAndContinue { selectedDevice?.let(onPayBluetooth) }
+                            } else {
+                                selectedDevice?.let(onPayBluetooth)
+                            }
                         },
-                        enabled = selectedDevice != null && isAmountValid && state.activeOfflineToken != null,
+                        enabled = selectedDevice != null && !state.isReserving &&
+                            (state.activeOfflineToken == null || isAmountValid),
                         trailingArrow = true
                     )
                 }
@@ -625,16 +630,28 @@ fun OfflinePaymentScreen(
                 SectionCard(Modifier.padding(top = 14.dp)) {
                     Text("Visual QR Code", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text(
-                        if (state.activeOfflineToken == null) "Reserve a token to create a payment QR." else "Show this code to the receiver.",
+                        if (state.activeOfflineToken == null) {
+                            "An offline token will be reserved from your online balance, then the signed payment QR will be created. Internet is needed for the reservation."
+                        } else {
+                            "Create a signed QR for ₹${state.paymentAmount} and show it to the merchant."
+                        },
                         color = MutedNavy,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(top = 3.dp, bottom = 12.dp)
                     )
 
                     PrimaryAction(
-                        text = if (state.activeOfflineToken == null) "Reserve Offline Token" else "Generate ₹${state.paymentAmount} Offline QR",
-                        onClick = if (state.activeOfflineToken == null) onGetToken else onPayQr,
-                        enabled = state.activeOfflineToken == null || isAmountValid,
+                        text = when {
+                            state.isReserving -> "Reserving token..."
+                            state.activeOfflineToken == null -> "Reserve & Make Payment Offline"
+                            else -> "Make Payment Offline"
+                        },
+                        onClick = {
+                            if (state.activeOfflineToken == null) onReserveAndContinue(onPayQr)
+                            else onPayQr()
+                        },
+                        enabled = !state.isReserving &&
+                            (state.activeOfflineToken == null || isAmountValid),
                         trailingArrow = true
                     )
                 }

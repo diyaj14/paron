@@ -31,9 +31,11 @@ public class TokenResponse {
     private String userId;
     private String deviceId;        // device this token is bound to
     private BigDecimal maxAmount;
+    private BigDecimal spentAmount;
     private LocalDateTime issuedAt;
     private LocalDateTime expiresAt;
     private String status;
     private String message;         // Human-readable status message
+    private boolean reservationRecovered;
 }
  

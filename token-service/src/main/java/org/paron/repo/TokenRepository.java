@@ -18,11 +18,18 @@ import java.util.UUID;
 @Repository
 public interface TokenRepository extends JpaRepository<TokenRecord, UUID> {
 
+    /** Serialize token issuance per user across service instances (PostgreSQL/Supabase). */
+    @Query(value = "WITH user_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtext(:userId))) SELECT 1 FROM user_lock",
+            nativeQuery = true)
+    Integer lockTokenIssuanceForUser(@Param("userId") String userId);
+
     //find user's current active token
-    Optional<TokenRecord> findByUserIdAndStatus(String userId, TokenStatus status);
+    List<TokenRecord> findByUserIdAndStatusOrderByCreatedAtDesc(String userId, TokenStatus status);
 
     //find a token by its jwt value
     Optional<TokenRecord> findByTokenValue(String tokenValue);
+
+    Optional<TokenRecord> findByReservationId(String reservationId);
 
     //find all tokens for user
     List<TokenRecord> findByUserIdOrderByCreatedAtDesc(String userId);
@@ -38,7 +45,7 @@ public interface TokenRepository extends JpaRepository<TokenRecord, UUID> {
     int expireOldTokens(@Param("now") LocalDateTime now);
 
     // Check if a user already has an active token (prevent double-issuing)
-    boolean existsByUserIdAndStatus(String userId, TokenStatus status);
+    boolean existsByUserIdAndStatusAndExpiresAtAfter(String userId, TokenStatus status, LocalDateTime now);
 }
 
 

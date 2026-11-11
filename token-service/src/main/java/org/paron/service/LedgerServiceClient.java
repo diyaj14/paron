@@ -2,6 +2,7 @@ package org.paron.service;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;import lombok.extern.slf4j.Slf4j;
 import org.paron.exception.TokenException;
+import org.paron.model.LedgerReserveResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
@@ -42,13 +43,13 @@ and plug that value in right here,
     }
     /*
      * Calls POST /api/v1/ledger/reserve on ledger-service.
-     * Returns the reservationId that the ledger assigned.
+     * Returns the reservationId and whether an existing lock was reused.
      *
      * If ledger-service returns an error (e.g. insufficient funds),
      * RestTemplate throws an exception, which propagates up to
      * TokenService and causes the whole transaction to roll back.
      */
-    public String reserveFunds(String userId,BigDecimal amount){
+    public LedgerReserveResult reserveFunds(String userId,BigDecimal amount){
         String url = ledgerServiceUrl + "/api/v1/ledger/reserve";
         Map<String,Object> body = Map.of(
                 "userId",userId,
@@ -63,11 +64,9 @@ and plug that value in right here,
          has String keys and String values — it's trusting you. (Java cant identify
          type of map at runtime
          */
-        Map<String,String> response;
+        LedgerReserveResult response;
         try {
-            @SuppressWarnings("unchecked")
-            Map<String,String> raw = restTemplate.postForObject(url,requestEntity,Map.class);
-            response = raw;
+            response = restTemplate.postForObject(url, requestEntity, LedgerReserveResult.class);
         } catch (HttpStatusCodeException e) {
             // Ledger returned an error (e.g. INSUFFICIENT_FUNDS). Surface it as a
             // proper business error instead of letting it bubble up as a 500.
@@ -91,10 +90,10 @@ and plug that value in right here,
             }
             throw new TokenException(errorCode, message);
         }
-        if (response == null || !response.containsKey("reservationId")) {
+        if (response == null || response.reservationId() == null || response.reservationId().isBlank()) {
             throw new RuntimeException("Invalid response from ledger-service during reserve");
         }
-        return response.get("reservationId");
+        return response;
     }
    /* Calls POST /api/v1/ledger/release on ledger-service.
      * Used when a token expires — unlocks the reserved funds.

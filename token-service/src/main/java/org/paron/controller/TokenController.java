@@ -44,6 +44,16 @@ public class TokenController {
         return ResponseEntity.ok(activeToken.get());
     }
 
+    /** Explicit authenticated transfer to this device; rotates and invalidates the previous JWT. */
+    @PostMapping("/active/recover")
+    public ResponseEntity<TokenResponse> recoverActiveToken(
+            @RequestHeader("X-User-Id") String authenticatedUserId,
+            @RequestParam String deviceId) {
+        var activeToken = tokenService.recoverActiveToken(authenticatedUserId, deviceId);
+        return activeToken.map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     /*Validate token before transaction (GET alias, kept for compatibility)*/
     @GetMapping("/validateToken")
     public ResponseEntity<ValidateTokenResponse> validate(@Valid @RequestBody ValidateTokenRequest request){

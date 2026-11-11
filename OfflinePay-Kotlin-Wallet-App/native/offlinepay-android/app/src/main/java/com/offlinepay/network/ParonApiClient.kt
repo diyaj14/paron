@@ -19,10 +19,12 @@ data class AccountBalance(
 
 data class OfflineTokenResult(
     val tokenId: String,
-    val token: String,
+    val token: String?,
     val maxAmount: Double,
+    val spentAmount: Double = 0.0,
     val expiresAt: String,
-    val status: String
+    val status: String,
+    val reservationRecovered: Boolean = false
 )
 
 data class SyncResult(
@@ -155,11 +157,37 @@ class ParonApiClient(private val context: Context) {
                 val obj = JSONObject(response)
                 OfflineTokenResult(
                     tokenId = obj.optString("tokenId"),
-                    token = obj.getString("token"),
+                    token = obj.optString("token").takeUnless { it.isBlank() || it == "null" },
                     maxAmount = obj.optDouble("maxAmount", 0.0),
+                    spentAmount = obj.optDouble("spentAmount", 0.0),
                     expiresAt = obj.optString("expiresAt"),
-                    status = obj.optString("status", "ACTIVE")
+                    status = obj.optString("status", "ACTIVE"),
+                    reservationRecovered = obj.optBoolean("reservationRecovered", false)
                 )
+            }
+        }
+
+    suspend fun recoverActiveOfflineToken(userId: String, deviceId: String): Result<OfflineTokenResult> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val encodedDeviceId = java.net.URLEncoder.encode(deviceId, "UTF-8")
+                val response = httpPost(
+                    gatewayUrl("/api/v1/tokens/active/recover?deviceId=$encodedDeviceId"),
+                    "{}",
+                    userId
+                )
+                val obj = JSONObject(response)
+                OfflineTokenResult(
+                    tokenId = obj.optString("tokenId"),
+                    token = obj.optString("token").takeUnless { it.isBlank() || it == "null" },
+                    maxAmount = obj.optDouble("maxAmount", 0.0),
+                    spentAmount = obj.optDouble("spentAmount", 0.0),
+                    expiresAt = obj.optString("expiresAt"),
+                    status = obj.optString("status", "ACTIVE"),
+                    reservationRecovered = false
+                ).also {
+                    require(!it.token.isNullOrBlank()) { "The backend did not return a usable offline token." }
+                }
             }
         }
 
@@ -188,8 +216,10 @@ class ParonApiClient(private val context: Context) {
                     tokenId = obj.optString("tokenId"),
                     token = obj.getString("token"),
                     maxAmount = obj.optDouble("maxAmount", amount),
+                    spentAmount = obj.optDouble("spentAmount", 0.0),
                     expiresAt = obj.optString("expiresAt"),
-                    status = obj.optString("status", "ACTIVE")
+                    status = obj.optString("status", "ACTIVE"),
+                    reservationRecovered = obj.optBoolean("reservationRecovered", false)
                 )
             }
         }
@@ -318,11 +348,17 @@ class ParonApiClient(private val context: Context) {
 
     private fun readableError(body: String): String = runCatching {
         val json = JSONObject(body)
-        val message = json.optString("message").takeIf(String::isNotBlank)
-        val code = json.optString("errorCode").takeIf(String::isNotBlank)
+        val message = sequenceOf("message", "detail", "error_description")
+            .map { json.optString(it) }
+            .firstOrNull { it.isNotBlank() }
+        val code = sequenceOf("errorCode", "error")
+            .map { json.optString(it) }
+            .firstOrNull { it.isNotBlank() }
+        val status = json.optInt("status", 0).takeIf { it > 0 }
         when {
             message != null && code != null -> "$message ($code)"
             message != null -> message
+            code != null && status != null -> "$code (HTTP $status)"
             code != null -> code
             else -> body
         }

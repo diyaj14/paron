@@ -74,17 +74,38 @@ public class ReservationService {
                 .orElseThrow(() -> new AccountNotFoundException(request.getUserId()));
 
         // The core safety check — never let a user reserve more than they have
-        if (account.getAvailableBalance().compareTo(request.getAmount()) < 0) {
-            throw new InsufficientFundsException(
-                    request.getUserId(), request.getAmount(), account.getAvailableBalance());
-        }
-
         // The per-user cap check — never let a user hold more than the maximum
         // offline amount across ALL their active reservations at once.
         // Because we hold the account row lock (findByUserIdForUpdate above),
         // every reserve/release/settle for this user serializes through here,
         // so this sum is guaranteed race-free: a concurrent second request
         // cannot slip in between this check and the insert below.
+        var activeReservations = reservationRepository.findByUserIdAndStatus(
+                request.getUserId(), ReservationStatus.ACTIVE);
+        if (activeReservations.size() == 1) {
+            Reservation existing = activeReservations.get(0);
+            log.warn("Reusing existing active reservation idempotently. reservationId={}, userId={}",
+                    existing.getId(), request.getUserId());
+            return ReserveResponse.builder()
+                    .reservationId(existing.getId().toString())
+                    .reservedAmount(existing.getReservedAmount())
+                    .settledAmount(existing.getSettledAmount() != null
+                            ? existing.getSettledAmount() : BigDecimal.ZERO)
+                    .remainingAvailableBalance(account.getAvailableBalance())
+                    .reusedExisting(true)
+                    .build();
+        }
+        if (activeReservations.size() > 1) {
+            throw new ActiveReservationExistsException(request.getUserId(), activeReservations.size());
+        }
+
+        // Reused reservations already have their funds locked. Check available
+        // balance only when creating a genuinely new reservation.
+        if (account.getAvailableBalance().compareTo(request.getAmount()) < 0) {
+            throw new InsufficientFundsException(
+                    request.getUserId(), request.getAmount(), account.getAvailableBalance());
+        }
+
         BigDecimal alreadyReserved = reservationRepository
                 .sumReservedAmountByUserIdAndStatus(request.getUserId(), ReservationStatus.ACTIVE);
         if (alreadyReserved.add(request.getAmount()).compareTo(maxActiveReserved) > 0) {
@@ -111,7 +132,9 @@ public class ReservationService {
         return ReserveResponse.builder()
                 .reservationId(reservation.getId().toString())   // UUID -> String for the HTTP response
                 .reservedAmount(request.getAmount())
+                .settledAmount(BigDecimal.ZERO)
                 .remainingAvailableBalance(account.getAvailableBalance())
+                .reusedExisting(false)
                 .build();
     }
 

@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Bluetooth
@@ -188,57 +187,18 @@ fun HomeScreen(
                 }
 
                 Spacer(Modifier.height(12.dp))
-
-                // Pay Offline Action
                 Row(
-                    Modifier.fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(TrustIndigo)
-                        .clickable(onClick = onOfflinePay)
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(Modifier.size(45.dp).clip(CircleShape).background(Color(0xFF254262)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.WifiOff, null, tint = Color.White)
-                    }
-                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text("Pay Offline", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        Text("Spend offline allowance via Bluetooth or QR", color = Color(0xFFCCD9E8), fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
-                    }
-                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, tint = Color.White)
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                // Receive Offline Payment Action (Bluetooth Merchant mode)
-                Row(
-                    Modifier.fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(if (state.bluetoothListening) Color(0xFF1E5B3A) else Color(0xFF1B314B))
-                        .clickable(onClick = onToggleBluetoothReceive)
-                        .padding(horizontal = 16.dp, vertical = 13.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(Modifier.size(45.dp).clip(CircleShape).background(Color.White.copy(alpha = .15f)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Bluetooth, null, tint = Color.White)
-                    }
-                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text(
-                            if (state.bluetoothListening) "Listening for Bluetooth Payment..." else "Receive Offline Payment (Bluetooth)",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
-                        Text(
-                            if (state.bluetoothListening) "Payer phone can now connect and pay!" else "Act as receiver / merchant phone",
-                            color = Color(0xFFCCD9E8),
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
-                    }
-                    if (state.bluetoothListening) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    }
+                    HomeAction("Pay Offline", Icons.Rounded.WifiOff, onOfflinePay, Modifier.weight(1f))
+                    HomeAction(
+                        if (state.bluetoothListening) "Receiving Offline" else "Receive Offline\n(Bluetooth)",
+                        Icons.Rounded.Bluetooth,
+                        onToggleBluetoothReceive,
+                        Modifier.weight(1f)
+                    )
                 }
             }
         }
@@ -402,6 +362,7 @@ private fun ChoiceCard(
 fun WalletScreen(
     state: AppUiState,
     onReserve: (String) -> Unit,
+    onRecoverToken: () -> Unit,
     onSync: () -> Unit,
     onSetServerUrl: (String) -> Unit,
     onTransfer: () -> Unit,
@@ -426,13 +387,23 @@ fun WalletScreen(
         ) {
             Column {
                 Text("Total Account Balance", color = Color(0xFFDCEFFF), fontSize = 13.sp)
-                Text("₹${state.onlineBalance + state.offlineBalance}", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                val reservedOffline = if (state.activeOfflineToken != null) {
+                    state.offlineBalance
+                } else {
+                    state.remoteTokenRemaining ?: state.offlineBalance
+                }
+                Text("₹${state.onlineBalance + reservedOffline}", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
             }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 13.dp)) {
             WalletBalanceCard("Available Online", "₹${state.onlineBalance}", Icons.Rounded.AccountBalance, Modifier.weight(1f))
-            WalletBalanceCard("Offline Token", "₹${state.offlineBalance}", Icons.Rounded.WifiOff, Modifier.weight(1f))
+            WalletBalanceCard(
+                if (state.activeOfflineToken == null && state.remoteTokenRemaining != null) "Locked on other device" else "Offline Token",
+                "₹${if (state.activeOfflineToken == null) state.remoteTokenRemaining ?: state.offlineBalance else state.offlineBalance}",
+                Icons.Rounded.WifiOff,
+                Modifier.weight(1f)
+            )
         }
 
         Text("Add funds with PayPal", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
@@ -467,7 +438,11 @@ fun WalletScreen(
 //                )
 //                Spacer(Modifier.width(8.dp))
                 Text(
-                    if (state.activeOfflineToken != null) "Offline token active" else "No active offline token",
+                    when {
+                        state.activeOfflineToken != null -> "Offline token active"
+                        state.activeTokenId != null -> "Active token is on another device"
+                        else -> "No active offline token"
+                    },
                     color = TrustIndigo,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp
@@ -476,13 +451,24 @@ fun WalletScreen(
             if (state.activeTokenId != null) {
                 Text("Token ID: ${state.activeTokenId}", color = MutedNavy, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
             }
+            if (state.activeTokenId != null && state.activeOfflineToken == null && state.remoteTokenRemaining != null) {
+                Text("₹${state.remoteTokenRemaining} is reserved, but not spendable on this device yet.", color = MutedNavy, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                PrimaryAction(
+                    if (state.isReserving) "Recovering..." else "Recover token on this device",
+                    onClick = onRecoverToken,
+                    modifier = Modifier.padding(top = 10.dp),
+                    enabled = !state.isReserving && state.internetAvailable && state.authenticated
+                )
+                Text("Recovery invalidates the previous device's token. Sync its pending payments first.", color = MutedNavy, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+            }
             if (state.tokenExpiresAt != null) {
                 Text("Expires: ${state.tokenExpiresAt}", color = MutedNavy, fontSize = 11.sp)
             }
         }
 
-        Text("Reserve funds", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
-        SectionCard {
+        if (state.activeTokenId == null) {
+            Text("Reserve funds", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+            SectionCard {
             OutlinedTextField(
                 value = reserveAmount,
                 onValueChange = { reserveAmount = it.filter(Char::isDigit).take(6) },
@@ -503,6 +489,7 @@ fun WalletScreen(
                 modifier = Modifier.padding(top = 12.dp),
                 enabled = reserveAmount.isNotBlank() && !state.isReserving
             )
+            }
         }
 
         // Backend Server Setting

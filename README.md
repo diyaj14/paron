@@ -4,6 +4,38 @@
 
 Paron lets a customer reserve funds while online, receive a capped offline token, and make a signed payment when connectivity is unavailable. When the device reconnects, the backend verifies and evaluates the queued payment before settling it. The Android wallet can also start a PayPal Sandbox top-up; Paron’s backend creates and captures the PayPal order and credits the demo ledger.
 
+**Public source repository:** [github.com/diyaj14/paron](https://github.com/diyaj14/paron)
+
+**License:** MIT (OSI-approved), see [LICENSE](LICENSE).
+
+**Primary experience:** native Android app. The browser demo is a companion walkthrough; its offline handoff is simulated.
+
+## Hackathon demo links
+
+Render free services can sleep; opening their health-check links wakes them. Wait for a successful health response before starting the end-to-end demo.
+
+| App or service | Public URL | Wake/health check |
+|---|---|---|
+| Paron overview and browser demo | **WEBSITE URL NEEDED** | Open the URL; then choose **Experience Demo** |
+| Android API gateway | [paron-api.onrender.com](https://paron-api.onrender.com) | [/actuator/health](https://paron-api.onrender.com/actuator/health) |
+| Auth service | [paron-auth.onrender.com](https://paron-auth.onrender.com) | [/actuator/health](https://paron-auth.onrender.com/actuator/health) |
+| Token service | [token-service-zwy4.onrender.com](https://token-service-zwy4.onrender.com) | [/actuator/health](https://token-service-zwy4.onrender.com/actuator/health) |
+| Ledger service | [paron-8w2t.onrender.com](https://paron-8w2t.onrender.com) | [/actuator/health](https://paron-8w2t.onrender.com/actuator/health) |
+| Sync service | [paron-sync.onrender.com](https://paron-sync.onrender.com) | [/actuator/health](https://paron-sync.onrender.com/actuator/health) |
+| Fraud service | [paron-fraud.onrender.com](https://paron-fraud.onrender.com) | [/actuator/health](https://paron-fraud.onrender.com/actuator/health) |
+| PayPal funding service | [paron-paypal-funding.onrender.com](https://paron-paypal-funding.onrender.com) | [/actuator/health](https://paron-paypal-funding.onrender.com/actuator/health) |
+| Risk model | [paron-risk-model.onrender.com](https://paron-risk-model.onrender.com) | [/healthz](https://paron-risk-model.onrender.com/healthz) |
+
+The Android app uses the API gateway URL. The browser demo is preconfigured with the API gateway and PayPal funding URLs above. Add the website's final public URL to this table and set both the API gateway and PayPal funding service `CORS_ALLOWED_ORIGINS` to that exact website origin.
+
+### If a backend URL shows a 404 at `/`
+
+That is expected for these API-only services: they do not serve a website at the root path. For example, a Spring Boot “Whitelabel Error Page” at the PayPal funding service root means `/` has no handler; it does not by itself mean the service failed to start. Open the health-check path in the table instead. PayPal order/config routes are API endpoints, and the funding routes require a valid Paron session; they are not browser homepages.
+
+### If the browser demo says “Failed to fetch”
+
+Open the API gateway and PayPal funding health checks first and wait for both to return a healthy response; Render may need time to wake a sleeping service. Then check that `DEFAULT_API_BASE` and `DEFAULT_FUNDING_BASE` in `pwa/public/src/app.js` match the deployed HTTPS URLs. In Render, set `CORS_ALLOWED_ORIGINS` on both the API gateway and PayPal funding service to the exact website origin (scheme and hostname only, with no path or trailing slash), for example `https://your-site.vercel.app`. Also confirm the gateway's `PAYPAL_FUNDING_SERVICE_URL` points to the funding service's reachable URL. Redeploy after changing environment variables. A 404 at `/` alone does not explain a browser “Failed to fetch”; a sleeping service, wrong URL, CORS rejection, or failed upstream connection can.
+
 
 ## Mobile app screenshots
 
@@ -31,6 +63,10 @@ Add Android screenshots to docs/screenshots/ and replace each placeholder below 
 - Starts PayPal Sandbox checkout from the Android wallet; the backend verifies the capture before crediting the demo ledger.
 
 The customer-facing experience is the native Android app. PayPal may open its own approval page or app during checkout, then return to Paron. The PWA is not required for the app flow.
+
+### Judge demo token access
+
+The judge deployment permits an authenticated user to retrieve and use their one active offline token from another device so judges can install the APK on their own phones. This is a demo convenience, not a production security setting. Set `OFFLINE_TOKEN_DEVICE_BINDING_REQUIRED=true` in token-service to bind tokens to the issuing device before any real-money use.
 
 ## Android demo APK
 
@@ -74,6 +110,21 @@ The ledger is the component that reserves, credits, and settles balances. The ri
 | risk-model-service | FastAPI service that loads the versioned risk model and returns a risk score |
 
 Backend data is stored in PostgreSQL (the project is configured for Supabase). Kafka and Redis are used by the local backend stack and can be provided by hosted services for deployment.
+
+## Tools, technologies, and sponsor integrations
+
+| Area | Tools used |
+|---|---|
+| Customer Android app | Kotlin, Jetpack Compose, Android SDK |
+| Backend APIs | Java, Spring Boot, Spring Cloud Gateway, Maven |
+| Risk scoring | Python, FastAPI, scikit-learn, NumPy, joblib |
+| Persistence and messaging | PostgreSQL via Supabase, Redis, Kafka |
+| Local infrastructure | Docker Compose |
+| Hosting | Render for backend services; the static companion website can be hosted on Render or Vercel |
+| Payment sponsor integration | PayPal Orders API in Sandbox mode |
+| API examples | `testing-guide.http` for the VS Code REST Client / IntelliJ HTTP Client |
+
+PayPal and Render are the sponsor integrations used in this project.
 
 ## Run locally
 
@@ -138,15 +189,17 @@ For more detailed local setup notes, see [run-guide.md](run-guide.md) and the [A
 
 ## PayPal Sandbox
 
-Create a Sandbox app and buyer account in the [PayPal Developer Dashboard](https://developer.paypal.com/). Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET on the backend only. The server uses PayPal Orders to create the order and verify/capture it after buyer approval.
+Create a Sandbox app and buyer account in the [PayPal Developer Dashboard](https://developer.paypal.com/). The Android app and browser demo ask the Paron backend to create an order. The buyer approves it in PayPal Sandbox; the funding service then verifies and captures that same order server-side. Only after a completed capture does it credit the demo ledger. The PayPal client secret stays on the backend and is never shipped in the Android app or website.
 
-The demo currently charges in USD and credits the INR test ledger using the configurable PAYPAL_WALLET_CREDIT_RATE (default 85.00). This is a demo conversion rate, not a live exchange rate. Use Sandbox buyer credentials to exercise the checkout.
+The demo currently charges in USD and credits the INR test ledger using the configurable `PAYPAL_WALLET_CREDIT_RATE` (default `85.00`). This is a demo conversion rate, not a live exchange rate or a real payout to a merchant. Use Sandbox buyer credentials and test funds to exercise checkout.
+
+If checkout reports `invalid_client` / `PAYPAL_CREDENTIALS_INVALID`, update the **PayPal funding backend** with the Client ID and Secret copied together from one PayPal **Sandbox REST app**, and set `PAYPAL_BASE_URL` to `https://api-m.sandbox.paypal.com`. Save and redeploy the Render funding service; for local development, update the matching entries in `.env` and restart it. Do not place the PayPal secret in Vercel or the Android app. See the [deployment troubleshooting steps](docs/deployguide.md#paypal-funding-paron-paypal-funding).
 
 ## AI risk model
 
-The model service loads a versioned calibrated logistic-regression model and returns a score, confidence, and reason contributions. The fraud service combines that result with deterministic rules and a low-signal review guard. If model scoring is unavailable, settlement is held for review rather than approved automatically.
+The risk model service loads a versioned calibrated logistic-regression model (`lr-calibrated-v2.0.0-scenario`). During receipt reconciliation, it scores transaction and velocity signals and returns a risk score, confidence, model version, and plain-language reason contributions. The fraud service combines that assessment with deterministic integrity and policy rules. Weak or unavailable model signals can result in a hold for review; the model does not move money or independently authorize a payment.
 
-The checked-in evaluation uses synthetic data. Its metrics demonstrate the pipeline on generated scenarios; they are not claims about real-world fraud detection. See the [model evaluation report](docs/reports/phase2-evaluation.md), [scenario data card](docs/scenario-data-card.md), and [fraud drill](ml/fraud_drill.py).
+The checked-in evaluation uses synthetic data (4,000 generated records, with 3,554 eligible for model scoring). Its metrics demonstrate the pipeline on generated scenarios; they are not claims about real-world fraud detection or production performance. See the [model evaluation report](docs/reports/phase2-evaluation.md), [scenario data card](docs/scenario-data-card.md), and [fraud drill](ml/fraud_drill.py).
 
 
 **Demo video:** *Add public YouTube link here.*

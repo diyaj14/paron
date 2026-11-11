@@ -49,6 +49,7 @@ data class AppUiState(
     val userEmail: String = "",
     val onlineBalance: Int = 1000,
     val offlineBalance: Int = 0,
+    val remoteTokenRemaining: Int? = null,
     val activeOfflineToken: String? = null,
     val activeTokenId: String? = null,
     val tokenExpiresAt: String? = null,

@@ -64,8 +64,8 @@ Use these names if available in your Render account. Render service names must b
 | Render service name | Public URL pattern |
 |---|---|
 | paron-risk-model | https://paron-risk-model.onrender.com |
-| paron-ledger | https://paron-ledger.onrender.com |
-| paron-token | https://paron-token.onrender.com |
+| paron-ledger | https://paron-8w2t.onrender.com |
+| paron-token | https://token-service-zwy4.onrender.com |
 | paron-auth | https://paron-auth.onrender.com |
 | paron-fraud | https://paron-fraud.onrender.com |
 | paron-sync | https://paron-sync.onrender.com |
@@ -160,7 +160,7 @@ Render supplies `PORT` automatically. No database, Redis, or Kafka variables are
 
   Copy the printed value into Render without sharing it. Keep this value stable; replacing it invalidates offline tokens signed with the previous key.
 - `OFFLINE_TOKEN_ISSUER` = `paron-offline-token`
-- `LEDGER_SERVICE_URL` = `https://paron-ledger.onrender.com`
+- `LEDGER_SERVICE_URL` = `https://paron-8w2t.onrender.com`
 
 Do not reuse the session JWT key as the offline token signing secret.
 
@@ -197,8 +197,8 @@ Do not reuse the session JWT key as the offline token signing secret.
 - `KAFKA_SASL_MECHANISM` = mechanism specified by the Kafka provider
 - `KAFKA_SECURITY_PROTOCOL` = provider protocol, typically `SASL_SSL`
 - `KAFKA_JAAS_CONFIG` = full JAAS login configuration using the Kafka username and password
-- `LEDGER_SERVICE_URL` = `https://paron-ledger.onrender.com`
-- `TOKEN_SERVICE_URL` = `https://paron-token.onrender.com`
+- `LEDGER_SERVICE_URL` = `https://paron-8w2t.onrender.com`
+- `TOKEN_SERVICE_URL` = `https://token-service-zwy4.onrender.com`
 - `FRAUD_SERVICE_URL` = `https://paron-fraud.onrender.com`
 
 The Kafka topic is `offline.transactions`. Use the exact connection mechanism and values shown in the Kafka provider dashboard.
@@ -215,7 +215,7 @@ Do not use Aiven's service certificate or private key for SASL/SCRAM. Render mou
 - `SERVICE` = `paypal-funding-service`
 - `JAR_FILE` = `paypal-funding-service-1.0`
 - `SUPABASE_HOST`, `SUPABASE_DB`, `SUPABASE_USER`, `SUPABASE_PASSWORD` = same Supabase project values as ledger
-- `LEDGER_SERVICE_URL` = `https://paron-ledger.onrender.com`
+- `LEDGER_SERVICE_URL` = `https://paron-8w2t.onrender.com`
 - `PAYPAL_CLIENT_ID` = Client ID from a PayPal Developer Sandbox app
 - `PAYPAL_CLIENT_SECRET` = Sandbox secret from the same app
 - `PAYPAL_BASE_URL` = `https://api-m.sandbox.paypal.com`
@@ -229,13 +229,15 @@ Do not use Aiven's service certificate or private key for SASL/SCRAM. Render mou
 
 Never put the PayPal secret in the Android app or public repository. The conversion rate is a demo ledger rate, not an exchange-rate quote. Use a Sandbox buyer account to approve checkout.
 
+If checkout returns `invalid_client` or `PAYPAL_CREDENTIALS_INVALID`, PayPal rejected the backend credentials before creating an order. In the PayPal Developer Dashboard, select **Sandbox**, open one Sandbox REST app, and copy that same app's **Client ID** and **Secret** into `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET`. Do not pair values from different apps or use Live credentials with the Sandbox endpoint. Set `PAYPAL_BASE_URL` to `https://api-m.sandbox.paypal.com`. In Render, update these variables on the **paron-paypal-funding** service, save, and redeploy. For local runs, put them in the repository `.env` without surrounding quotes, then restart the funding service. The Vercel project must not contain the PayPal secret; it only needs the public website deployment and the API URLs/CORS configuration.
+
 #### API gateway (`paron-api`)
 
 - `SERVICE` = `api-gateway`
 - `JAR_FILE` = `api-gateway-1.0-boot`
 - `AUTH_SERVICE_URL` = `https://paron-auth.onrender.com`
-- `TOKEN_SERVICE_URL` = `https://paron-token.onrender.com`
-- `LEDGER_SERVICE_URL` = `https://paron-ledger.onrender.com`
+- `TOKEN_SERVICE_URL` = `https://token-service-zwy4.onrender.com`
+- `LEDGER_SERVICE_URL` = `https://paron-8w2t.onrender.com`
 - `SYNC_SERVICE_URL` = `https://paron-sync.onrender.com`
 - `FRAUD_SERVICE_URL` = `https://paron-fraud.onrender.com`
 - `PAYPAL_FUNDING_SERVICE_URL` = `https://paron-paypal-funding.onrender.com`

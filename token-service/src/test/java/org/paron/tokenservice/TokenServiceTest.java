@@ -2,6 +2,7 @@ package org.paron.tokenservice;
 
 import org.paron.model.TokenRequest;
 import org.paron.model.TokenResponse;
+import org.paron.model.LedgerReserveResult;
 import org.paron.exception.ActiveTokenExsistsException;
 import org.paron.model.TokenRecord;
 import org.paron.model.TokenStatus;
@@ -65,11 +66,11 @@ class TokenServiceTest{
     @Test
     void issueToken_whenNoActiveToken_shouldSucced() {
         //given-user has no active token
-        when(tokenRepository.existsByUserIdAndStatus("user_test_123", TokenStatus.ACTIVE))
+        when(tokenRepository.existsByUserIdAndStatusAndExpiresAtAfter(eq("user_test_123"), eq(TokenStatus.ACTIVE), any()))
                 .thenReturn(false);
         //ledger-service returns a reservation ID
         when(ledgerServiceClient.reserveFunds("user_test_123", new BigDecimal("500.00")))
-                .thenReturn("res_abc123");
+                .thenReturn(new LedgerReserveResult("res_abc123", new BigDecimal("500.00"), BigDecimal.ZERO, false));
         //Token repo returns the saved record with uuid
         TokenRecord savedRecord = TokenRecord.builder()
                 .id(UUID.randomUUID())
@@ -101,7 +102,7 @@ class TokenServiceTest{
         @Test
         void issueToken_whenActiveTokenExists_shouldThrowException() {
             // GIVEN — user already has an active token
-            when(tokenRepository.existsByUserIdAndStatus("user_test_123", TokenStatus.ACTIVE))
+            when(tokenRepository.existsByUserIdAndStatusAndExpiresAtAfter(eq("user_test_123"), eq(TokenStatus.ACTIVE), any()))
                     .thenReturn(true);
 
             //When-then -expect exception
