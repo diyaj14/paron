@@ -159,6 +159,19 @@ spring:
                 redis-rate-limiter.burstCapacity: 30
                 redis-rate-limiter.requestedTokens: 1
 
+        # Authenticated recovery rotates the active token onto the current device.
+        - id: token-active-recover
+          uri: ${TOKEN_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/tokens/active/recover
+            - Method=POST
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 30
+                redis-rate-limiter.requestedTokens: 1
+
         # ── Dev-only: create a test ledger account through the gateway ───────
         - id: ledger-create-account
           uri: ${LEDGER_SERVICE_URL:http://localhost:8082}

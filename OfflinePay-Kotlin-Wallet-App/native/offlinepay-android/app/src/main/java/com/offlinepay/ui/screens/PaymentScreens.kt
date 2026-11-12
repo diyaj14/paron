@@ -398,7 +398,7 @@ fun OfflinePaymentScreen(
     onAmountChange: (String) -> Unit,
     onNoteChange: (String) -> Unit,
     pairedDevices: List<BluetoothDevice>,
-    onReserveAndContinue: (onReserved: () -> Unit) -> Unit,
+    onGoToWallet: () -> Unit,
     onPayQr: () -> Unit,
     onPayBluetooth: (BluetoothDevice) -> Unit
 ) {
@@ -413,7 +413,10 @@ fun OfflinePaymentScreen(
     }
 
     val amountValue = state.paymentAmount.toDoubleOrNull() ?: 0.0
-    val isAmountValid = amountValue > 0 && amountValue <= state.offlineBalance
+    val hasActiveToken = !state.activeOfflineToken.isNullOrBlank()
+    val hasValidAmount = amountValue > 0
+    val hasEnoughOfflineBalance = hasActiveToken && hasValidAmount && amountValue <= state.offlineBalance
+    val shouldOpenWallet = hasValidAmount && (!hasActiveToken || amountValue > state.offlineBalance)
 
     Column(Modifier.fillMaxSize().background(WealthBeige).verticalScroll(rememberScrollState())) {
         Box(Modifier.fillMaxWidth().height(210.dp).background(Color(0xFFFFFEFA))) {
@@ -476,7 +479,7 @@ fun OfflinePaymentScreen(
                         Icon(Icons.Rounded.AccountBalanceWallet, null, tint = YieldBlue)
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                        Text(if (state.activeOfflineToken != null) "Active Offline Token Balance" else "Offline Balance", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(if (hasActiveToken) "Active Offline Token Balance" else "Offline Balance", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Text("₹${state.offlineBalance} available to spend", color = MutedNavy, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
                     }
                 }
@@ -486,9 +489,16 @@ fun OfflinePaymentScreen(
                     color = YieldBlue,
                     trackColor = LineBlue
                 )
-                if (state.activeOfflineToken == null) {
+                if (!hasActiveToken) {
                     Text(
-                        "No active offline token",
+                        "Not enough offline balance. Reserve an offline token in Wallet before paying.",
+                        color = MutedNavy,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                } else if (hasValidAmount && amountValue > state.offlineBalance) {
+                    Text(
+                        "Not enough offline balance for this payment. Lower the amount or check Wallet.",
                         color = MutedNavy,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 8.dp)
@@ -612,16 +622,18 @@ fun OfflinePaymentScreen(
 
                     Spacer(Modifier.height(14.dp))
                     PrimaryAction(
-                        text = if (selectedDevice != null) "Pay ₹${state.paymentAmount} via Bluetooth to ${selectedDevice?.name ?: "Phone"}" else "Select Device to Pay",
-                        onClick = {
-                            if (state.activeOfflineToken == null) {
-                                onReserveAndContinue { selectedDevice?.let(onPayBluetooth) }
-                            } else {
-                                selectedDevice?.let(onPayBluetooth)
-                            }
+                        text = when {
+                            !hasValidAmount -> "Enter payment amount"
+                            shouldOpenWallet -> "Go to Wallet for Offline Funds"
+                            selectedDevice != null -> "Pay via Bluetooth to ${selectedDevice?.name ?: "Phone"}"
+                            else -> "Select Device to Pay"
                         },
-                        enabled = selectedDevice != null && !state.isReserving &&
-                            (state.activeOfflineToken == null || isAmountValid),
+                        onClick = {
+                            if (shouldOpenWallet) onGoToWallet()
+                            else if (hasEnoughOfflineBalance) selectedDevice?.let(onPayBluetooth)
+                        },
+                        enabled = hasValidAmount &&
+                            (shouldOpenWallet || (selectedDevice != null && hasEnoughOfflineBalance)),
                         trailingArrow = true
                     )
                 }
@@ -630,8 +642,10 @@ fun OfflinePaymentScreen(
                 SectionCard(Modifier.padding(top = 14.dp)) {
                     Text("Visual QR Code", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text(
-                        if (state.activeOfflineToken == null) {
-                            "An offline token will be reserved from your online balance, then the signed payment QR will be created. Internet is needed for the reservation."
+                        if (!hasActiveToken) {
+                            "Not enough offline balance. Go to Wallet and reserve an offline token before creating a payment QR."
+                        } else if (!hasEnoughOfflineBalance) {
+                            "Not enough offline balance for this payment. Lower the amount or check Wallet."
                         } else {
                             "Create a signed QR for ₹${state.paymentAmount} and show it to the merchant."
                         },
@@ -642,16 +656,15 @@ fun OfflinePaymentScreen(
 
                     PrimaryAction(
                         text = when {
-                            state.isReserving -> "Reserving token..."
-                            state.activeOfflineToken == null -> "Reserve & Make Payment Offline"
+                            !hasValidAmount -> "Enter payment amount"
+                            shouldOpenWallet -> "Go to Wallet for Offline Funds"
                             else -> "Make Payment Offline"
                         },
                         onClick = {
-                            if (state.activeOfflineToken == null) onReserveAndContinue(onPayQr)
-                            else onPayQr()
+                            if (shouldOpenWallet) onGoToWallet()
+                            else if (hasEnoughOfflineBalance) onPayQr()
                         },
-                        enabled = !state.isReserving &&
-                            (state.activeOfflineToken == null || isAmountValid),
+                        enabled = hasValidAmount && (shouldOpenWallet || hasEnoughOfflineBalance),
                         trailingArrow = true
                     )
                 }

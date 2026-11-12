@@ -70,7 +70,8 @@ class TokenServiceTest{
                 .thenReturn(false);
         //ledger-service returns a reservation ID
         when(ledgerServiceClient.reserveFunds("user_test_123", new BigDecimal("500.00")))
-                .thenReturn(new LedgerReserveResult("res_abc123", new BigDecimal("500.00"), BigDecimal.ZERO, false));
+                .thenReturn(new LedgerReserveResult("res_abc123", new BigDecimal("500.00"), BigDecimal.ZERO,
+                        new BigDecimal("500.00"), false));
         //Token repo returns the saved record with uuid
         TokenRecord savedRecord = TokenRecord.builder()
                 .id(UUID.randomUUID())

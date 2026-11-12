@@ -84,12 +84,12 @@ Create this first so the fraud service can point to it.
 4. Set **Dockerfile Path** to risk-model-service/Dockerfile.
 5. Set **Docker Context** to the repository root (`.`). The Dockerfile copies files from `risk-model-service/`.
 6. Add this environment variable:
-   - MODEL_DIR = /app/artifacts/approved/lr-calibrated-v1.0.0
+   - MODEL_DIR = /app/artifacts/scenario-v2
 7. Set the HTTP health check path to /healthz, if the form offers it.
 8. Select **Deploy Web Service**.
 9. Wait for the deployment to become live. Open the service's public URL with /healthz, for example https://paron-risk-model.onrender.com/healthz. It should return a successful response.
 
-The model Dockerfile copies its model files into /app/artifacts; the MODEL_DIR value points the service to the versioned model included in the repository.
+The model Dockerfile copies the promoted scenario-v2 artifact into /app/artifacts/scenario-v2; the MODEL_DIR value makes the hosted service load the same model described in the evaluation report. Redeploy the model service after changing the Dockerfile, and confirm `/healthz` reports `lr-calibrated-v2.0.0-scenario` before recording the demo.
 
 ## Create the Java services
 
@@ -130,7 +130,7 @@ Add these on each service's **Environment** page before its first deploy. Put `S
 
 #### Risk model (`paron-risk-model`)
 
-- `MODEL_DIR` = `/app/artifacts/approved/lr-calibrated-v1.0.0`
+- `MODEL_DIR` = `/app/artifacts/scenario-v2`
 
 Render supplies `PORT` automatically. No database, Redis, or Kafka variables are needed here.
 

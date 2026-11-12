@@ -221,6 +221,10 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun startPaypalFunding(amount: String, openApproval: (String) -> Unit) {
+        if (_uiState.value.pendingPaypalOrderId != null) {
+            _uiState.update { it.copy(message = "Confirm the previous PayPal order before starting another checkout.") }
+            return
+        }
         val userId = _uiState.value.phoneNumber
         val amountUsd = amount.toDoubleOrNull()
         if (userId.isBlank() || amountUsd == null || amountUsd <= 0.0) {
@@ -230,7 +234,13 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.update { it.copy(isFunding = true, message = "Creating PayPal Sandbox order…") }
         viewModelScope.launch {
             apiClient.createPaypalFundingOrder(userId, amountUsd).onSuccess { order ->
-                _uiState.update { it.copy(isFunding = false, message = "Approve the payment in PayPal Sandbox.") }
+                val updated = _uiState.value.copy(
+                    isFunding = false,
+                    pendingPaypalOrderId = order.paypalOrderId,
+                    message = "Approve the payment in PayPal Sandbox."
+                )
+                _uiState.value = updated
+                persistState(updated)
                 openApproval(order.approvalUrl)
             }.onFailure { error ->
                 _uiState.update { it.copy(isFunding = false, message = "PayPal funding failed: ${error.message}") }
@@ -240,22 +250,52 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
 
     fun handlePaypalReturn(orderId: String?, cancelled: Boolean) {
         if (cancelled) {
-            _uiState.update { it.copy(isFunding = false, message = "PayPal payment cancelled.") }
-            return
-        }
-        if (orderId.isNullOrBlank()) {
-            _uiState.update { it.copy(isFunding = false, message = "PayPal did not return an order ID.") }
+            val updated = _uiState.value.copy(
+                isFunding = false,
+                pendingPaypalOrderId = null,
+                message = "PayPal payment cancelled. No wallet credit was applied."
+            )
+            _uiState.value = updated
+            persistState(updated)
             return
         }
         val userId = _uiState.value.phoneNumber
-        _uiState.update { it.copy(isFunding = true, message = "Verifying PayPal payment…") }
+        val pendingOrderId = orderId?.takeIf(String::isNotBlank) ?: _uiState.value.pendingPaypalOrderId
+        if (pendingOrderId.isNullOrBlank()) {
+            _uiState.update { it.copy(isFunding = false, message = "No PayPal order is waiting for confirmation.") }
+            return
+        }
+        val starting = _uiState.value.copy(
+            isFunding = true,
+            pendingPaypalOrderId = pendingOrderId,
+            message = "Verifying PayPal payment and updating your wallet…"
+        )
+        _uiState.value = starting
+        persistState(starting)
         viewModelScope.launch {
-            apiClient.capturePaypalFundingOrder(userId, orderId).onSuccess { balance ->
-                _uiState.update { it.copy(isFunding = false, onlineBalance = balance.availableBalance.toInt(), message = "PayPal Sandbox payment captured and wallet updated.") }
+            apiClient.capturePaypalFundingOrder(userId, pendingOrderId).onSuccess { balance ->
+                val updated = _uiState.value.copy(
+                    isFunding = false,
+                    pendingPaypalOrderId = null,
+                    onlineBalance = balance.availableBalance.toInt(),
+                    message = "PayPal Sandbox payment captured and wallet updated. Set aside an offline amount below when you're ready."
+                )
+                _uiState.value = updated
+                persistState(updated)
             }.onFailure { error ->
-                _uiState.update { it.copy(isFunding = false, message = "PayPal capture failed: ${error.message}") }
+                val updated = _uiState.value.copy(
+                    isFunding = false,
+                    pendingPaypalOrderId = pendingOrderId,
+                    message = "PayPal approval was received, but Paron could not confirm the wallet update: ${error.message}. Your payment may already have been captured. Retry confirmation for this order; don't pay again."
+                )
+                _uiState.value = updated
+                persistState(updated)
             }
         }
+    }
+
+    fun retryPaypalCapture() {
+        handlePaypalReturn(_uiState.value.pendingPaypalOrderId, cancelled = false)
     }
 
     /**
@@ -265,10 +305,6 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun reserveOffline(amountText: String) {
         reserveOfflineInternal(amountText, afterReserved = null)
-    }
-
-    fun reserveOfflineForPayment(amountText: String, afterReserved: () -> Unit) {
-        reserveOfflineInternal(amountText, afterReserved)
     }
 
     fun recoverActiveTokenOnThisDevice() {
@@ -345,16 +381,9 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             val existingToken = activeResult.getOrNull()
             if (existingToken != null) {
                 if (existingToken.token.isNullOrBlank()) {
-                    val blocked = _uiState.value.copy(
-                        isReserving = false,
-                        activeOfflineToken = null,
-                        activeTokenId = existingToken.tokenId,
-                        tokenExpiresAt = existingToken.expiresAt,
-                        offlineBalance = 0,
-                        message = "An active token is assigned to another device. Review the recovery option in Wallet before paying here."
-                    )
-                    _uiState.value = blocked
-                    persistState(blocked)
+                    // The reservation exists but its JWT is not available to this
+                    // device. Recover it rather than asking for a second reservation.
+                    recoverExistingToken(userId, deviceId, afterReserved)
                     return@launch
                 }
                 val remaining = (existingToken.maxAmount - existingToken.spentAmount).coerceAtLeast(0.0)
@@ -426,14 +455,57 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                     refreshBalancesFromBackend()
                 }
             }.onFailure { err ->
-                _uiState.update {
-                    it.copy(
-                        isReserving = false,
-                        message = "Token reservation failed: ${err.message}"
-                    )
+                // If the lookup missed an existing cross-device reservation, the
+                // issuance conflict is authoritative. Recover that token instead.
+                if (err.message.orEmpty().contains("ACTIVE_TOKEN_EXISTS", ignoreCase = true)) {
+                    recoverExistingToken(userId, deviceId, afterReserved)
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isReserving = false,
+                            message = "Token reservation failed: ${err.message}"
+                        )
+                    }
                 }
             }
         }
+    }
+
+    private suspend fun recoverExistingToken(
+        userId: String,
+        deviceId: String,
+        afterReserved: (() -> Unit)?
+    ) {
+        _uiState.update { it.copy(isReserving = true, message = "Recovering your existing offline token…") }
+        apiClient.recoverActiveOfflineToken(userId, deviceId)
+            .onSuccess { token ->
+                val remaining = (token.maxAmount - token.spentAmount).toInt().coerceAtLeast(0)
+                val updated = _uiState.value.copy(
+                    isReserving = false,
+                    activeOfflineToken = token.token,
+                    activeTokenId = token.tokenId,
+                    tokenExpiresAt = token.expiresAt,
+                    offlineBalance = remaining,
+                    remoteTokenRemaining = remaining,
+                    message = if (afterReserved == null) {
+                        "Recovered your existing ₹$remaining offline token. No additional funds were reserved."
+                    } else null
+                )
+                _uiState.value = updated
+                persistState(updated)
+                if (afterReserved != null) afterReserved()
+            }
+            .onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        isReserving = false,
+                        activeTokenId = null,
+                        activeOfflineToken = null,
+                        offlineBalance = 0,
+                        message = "An active token already exists, but recovery failed: ${error.message}. Check that the latest token-service and API gateway are deployed."
+                    )
+                }
+            }
     }
 
     /**
@@ -518,7 +590,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
         }
 
         if (amount > current.offlineBalance) {
-            _uiState.update { it.copy(message = "Offline balance is too low. Please reserve an offline token first.") }
+            _uiState.update { it.copy(message = "Not enough offline balance. Go to Wallet and reserve an offline token before paying.") }
             return false
         }
 
@@ -862,11 +934,19 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun sendBluetoothPayment(device: BluetoothDevice) {
         val current = _uiState.value
-        val amount = current.paymentAmount.toDoubleOrNull() ?: 100.0
+        val amount = current.paymentAmount.toDoubleOrNull()
         val token = current.activeOfflineToken
 
-        if (token == null) {
-            _uiState.update { it.copy(message = "Please reserve an offline token before paying.") }
+        if (amount == null || amount <= 0) {
+            _uiState.update { it.copy(message = "Enter a valid payment amount.") }
+            return
+        }
+        if (token.isNullOrBlank()) {
+            _uiState.update { it.copy(message = "Not enough offline balance. Go to Wallet and reserve an offline token before paying.") }
+            return
+        }
+        if (amount > current.offlineBalance) {
+            _uiState.update { it.copy(message = "Not enough offline balance for this payment. Lower the amount or check Wallet.") }
             return
         }
 
@@ -955,7 +1035,8 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             activeTokenId = demoStore.getString(KEY_TOKEN_ID, null),
             tokenExpiresAt = demoStore.getString(KEY_TOKEN_EXPIRES, null),
             serverBaseUrl = apiClient.baseUrl,
-            transactions = storedTransactions
+            transactions = storedTransactions,
+            pendingPaypalOrderId = demoStore.getString(KEY_PENDING_PAYPAL_ORDER, null)
         )
     }
 
@@ -990,6 +1071,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
             .putString(KEY_TOKEN_ID, state.activeTokenId)
             .putString(KEY_TOKEN_EXPIRES, state.tokenExpiresAt)
             .putString(KEY_TRANSACTIONS, transactions.toString())
+            .putString(KEY_PENDING_PAYPAL_ORDER, state.pendingPaypalOrderId)
             .apply()
     }
 
@@ -1030,5 +1112,6 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
         private const val KEY_TOKEN_ID = "active_token_id"
         private const val KEY_TOKEN_EXPIRES = "token_expires_at"
         private const val KEY_TRANSACTIONS = "transactions"
+        private const val KEY_PENDING_PAYPAL_ORDER = "pending_paypal_order"
     }
 }

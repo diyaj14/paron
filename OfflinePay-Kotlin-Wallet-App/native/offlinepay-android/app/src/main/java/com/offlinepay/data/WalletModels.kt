@@ -64,6 +64,7 @@ data class AppUiState(
     val isSyncing: Boolean = false,
     val isReserving: Boolean = false,
     val isFunding: Boolean = false,
+    val pendingPaypalOrderId: String? = null,
     val bluetoothListening: Boolean = false,
     val lastQrPayload: String? = null,
     val syncEvents: List<SyncEvent> = emptyList(),

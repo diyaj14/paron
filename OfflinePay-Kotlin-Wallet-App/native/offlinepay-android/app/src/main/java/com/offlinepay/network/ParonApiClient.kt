@@ -285,8 +285,11 @@ class ParonApiClient(private val context: Context) {
         val url = URL(urlStr)
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
-        conn.connectTimeout = 7000
-        conn.readTimeout = 7000
+        // Render free services can take close to a minute to wake. Funding capture
+        // also calls PayPal and the ledger, so a short mobile timeout can hide a
+        // successful server-side capture/credit.
+        conn.connectTimeout = 15000
+        conn.readTimeout = 120000
         val token = accessToken ?: throw IllegalStateException("Sign in before calling the Paron API")
         conn.setRequestProperty("Authorization", "Bearer $token")
         conn.setRequestProperty("Accept", "application/json")
@@ -304,8 +307,8 @@ class ParonApiClient(private val context: Context) {
         val url = URL(urlStr)
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
-        conn.connectTimeout = 7000
-        conn.readTimeout = 7000
+        conn.connectTimeout = 15000
+        conn.readTimeout = 120000
         val token = accessToken ?: throw IllegalStateException("Sign in before calling the Paron API")
         conn.setRequestProperty("Authorization", "Bearer $token")
         conn.setRequestProperty("Accept", "application/json")
@@ -325,8 +328,8 @@ class ParonApiClient(private val context: Context) {
         val url = URL(urlStr)
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
-        conn.connectTimeout = 7000
-        conn.readTimeout = 7000
+        conn.connectTimeout = 15000
+        conn.readTimeout = 120000
         conn.doOutput = true
         conn.setRequestProperty("Content-Type", "application/json")
         if (authenticated) {

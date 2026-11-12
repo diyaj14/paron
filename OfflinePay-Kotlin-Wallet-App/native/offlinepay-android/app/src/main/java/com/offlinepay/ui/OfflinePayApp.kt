@@ -246,9 +246,7 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onAmountChange = viewModel::setPaymentAmount,
                     onNoteChange = viewModel::setPaymentNote,
                     pairedDevices = viewModel.bluetoothManager.getPairedDevices(),
-                    onReserveAndContinue = { continuePayment ->
-                        viewModel.reserveOfflineForPayment(state.paymentAmount, continuePayment)
-                    },
+                    onGoToWallet = { navController.navigate("wallet") { launchSingleTop = true } },
                     onPayQr = {
                         if (viewModel.saveOfflinePayment()) navController.navigate("success")
                     },
@@ -284,6 +282,7 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onSync = viewModel::syncNow,
                     onSetServerUrl = viewModel::setServerBaseUrl,
                     onTransfer = viewModel::refreshBalancesFromBackend,
+                    onRetryPaypalCapture = viewModel::retryPaypalCapture,
                     onPaypalTopUp = { amount -> viewModel.startPaypalFunding(amount) { approvalUrl ->
                         runCatching {
                             context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(approvalUrl)))

@@ -6,5 +6,6 @@ public record LedgerReserveResult(
         String reservationId,
         BigDecimal reservedAmount,
         BigDecimal settledAmount,
+        BigDecimal remainingAvailableBalance,
         boolean reusedExisting) {
 }

@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY risk-model-service/app/ ./app/
 COPY risk-model-service/artifacts/ ./artifacts/
+COPY ml/artifacts/scenario-v2/ ./artifacts/scenario-v2/
 
 EXPOSE 8600
 

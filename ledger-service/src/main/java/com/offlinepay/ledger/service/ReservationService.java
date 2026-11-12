@@ -96,7 +96,33 @@ public class ReservationService {
                     .build();
         }
         if (activeReservations.size() > 1) {
-            throw new ActiveReservationExistsException(request.getUserId(), activeReservations.size());
+            // token-service calls this endpoint only after its per-user issuance
+            // lock and after confirming that no unexpired ACTIVE token exists.
+            // Older app builds could nevertheless leave several ledger locks
+            // behind (for example, if token issuance failed after the ledger
+            // committed). Those locks have no usable token. Close them safely,
+            // return only each reservation's unspent remainder, then create the
+            // single reservation requested below. Settled amounts stay debited.
+            log.warn("Repairing {} orphaned active reservations before issuing a new token. userId={}",
+                    activeReservations.size(), request.getUserId());
+            LocalDateTime closedAt = LocalDateTime.now();
+            for (Reservation stale : activeReservations) {
+                BigDecimal settled = stale.getSettledAmount() != null
+                        ? stale.getSettledAmount() : BigDecimal.ZERO;
+                BigDecimal remainder = stale.getReservedAmount().subtract(settled);
+                if (remainder.compareTo(BigDecimal.ZERO) > 0) {
+                    account.setAvailableBalance(account.getAvailableBalance().add(remainder));
+                    stale.setStatus(ReservationStatus.RELEASED);
+                } else {
+                    stale.setStatus(ReservationStatus.SETTLED);
+                }
+                stale.setClosedAt(closedAt);
+                reservationRepository.save(stale);
+                log.info("Closed stale reservation. reservationId={}, returnedAmount={}",
+                        stale.getId(), remainder.max(BigDecimal.ZERO));
+            }
+            account.setUpdatedAt(closedAt);
+            accountRepository.save(account);
         }
 
         // Reused reservations already have their funds locked. Check available

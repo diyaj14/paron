@@ -1,136 +1,100 @@
-# Paron — 5-Minute Pitch Video Script
+# Paron — PayPal AI Hackathon Pitch
 
-**Track:** Razorpay AI Buildathon — AI Risk Manager
-**Submission:** this script + the 5-min video + the repo (which actually runs)
+Use this as the narration and shot list for the submission video. Keep the Android app and backend responses visible during the demo; do not present the browser simulation as a real Bluetooth transfer.
 
----
+## One-line pitch
 
-## 0. Cold open (0:00–0:15)
+**Paron lets people make a small, prepaid phone-to-phone payment when internet access disappears, then verifies and reconciles the receipt when connectivity returns.**
 
-> "Your customer's phone is in airplane mode. They still need to pay. You accept the payment.
-> You just took on the risk of a settlement that happens hours later — and by then, the receipt
-> might not even be real."
+## Slide 1 — The moment the connection drops
 
-*(Screen: a phone in airplane mode passes ₹150 to a merchant phone over Bluetooth; the merchant's balance ticks up while nothing has settled yet.)*
+**On screen:** A campus canteen queue and a payment screen stuck loading.
 
----
+**Say:**
 
-## 1. Problem (0:15–0:45)
+> In India, we reach for our phones for everyday payments. But at a campus canteen, in a basement, or on a crowded network, the connection can disappear at exactly the wrong moment. I have been the person searching for someone with a better signal while the queue waits. Paron is built for that interruption.
 
-> "Delayed and offline settlement has an uncomfortable gap: between **offline acceptance** and
-> **online settlement**, a transaction is just a blob of bytes. It can be replayed, forged,
-> overspent, or pushed through from a device that has no business spending that token.
-> The merchant is the one exposed — and a payments platform inherits that exposure.
->
-> Track Two asked for a risk manager with *measured precision and recall*. So here's the plan:
-> make the money **bounded by construction**, and make the settlement decision **defence-only AI** —
-> it can only ever say three things."
+## Slide 2 — A small offline allowance
 
-*(Big on-screen words: APPROVE · HOLD · REJECT.)*
+**On screen:** Paron wallet and the PayPal Sandbox checkout.
 
----
+**Say:**
 
-## 2. System walkthrough (0:45–2:15) — "signed receipts + hard money guards"
+> While online, a customer funds the Paron demo wallet through PayPal Sandbox and sets aside a capped amount for offline use. The backend confirms the PayPal capture before crediting the demo ledger, then issues one active, time-limited offline token. The customer is spending from that reserved allowance, not creating new money at the counter.
 
-> "Three phases. **Phase one, online:** the customer requests an offline limit; the platform
-> *reserves* that money in a ledger and issues a capped, expiring JWT spending token. There is
-> no new money at the point of sale — it's already been set aside. *(walk through the reserve)*
+## Slide 3 — Pay nearby without internet
 
-> **Phase two, offline:** the customer pays the merchant over Bluetooth in airplane mode.
-> Here's the heart of it — every single payment is **signed on-device** with an ECDSA P-256 key,
-> over a canonical string: transaction id, token, merchant, amount, timestamp, device id.
-> The merchant POS refuses anything above the displayed cap. The signing key never leaves the phone.
+**On screen:** Two Android phones; customer sends a payment by Bluetooth or presents a QR code. Show airplane mode if the recording setup supports it.
 
-> **Phase three, reconnect:** the device pushes its queue of receipts. Before anything settles,
-> sync-service re-verifies **every signature** — the amount the merchant saw is in the bytes that
-> were signed — then token spend-state is checked cumulatively, and the risk manager looks at it.
-> Three outcomes only:
-> - a **hard rule hit** — replayed token, duplicate payload, velocity breach, amount anomaly,
->   temporal impossibility — is a hard reject. No model score overrides a rule.
-> - if no rule fired, the **calibrated model** scores it. Below threshold: approve. Way above: reject.
->   In between, or if confidence is low, or if the model is down: **hold for review**, no money moves.
-> - and here's the guard that matters: a brand-new device with zero history **never auto-approves**."
+**Say:**
 
-> "And when two receipts contradict each other — the merchant says ₹200, the customer's device says
-> it already paid — there's an **AI Judge**: it re-verifies both signatures, checks the authoritative
-> token spend state, and hands down a deterministic, auditable verdict: forged receipt, double spend,
-> single payment, multiple legitimate. The LLM, if present, only writes the summary. It never decides."
+> When the network is unavailable, the customer creates a payment receipt locally. The app signs the payment details with an ECDSA P-256 device key and transfers the receipt to the merchant over Bluetooth or QR. The merchant gets an offline acknowledgement and stores the receipt. That acknowledgement is provisional; it is not yet a final settlement.
 
----
+## Slide 4 — Reconnect, verify, settle
 
-## 3. Live batch demo (2:15–3:45)
+**On screen:** Turn connectivity back on, press Sync, and show the backend result plus both wallet/merchant ledger states.
 
-> "Let's prove the repo actually runs — a real batch through the real stack."
+**Say:**
 
-*(Live demo, captured from the running services; no slides. Suggested script while it runs:)*
+> When the payment is synced after reconnect, Paron sends the queued receipt to the backend. The sync and fraud services check the signature, token limits, duplicates, and transaction patterns. The ledger settles an accepted claim and updates the merchant's demo balance. A suspicious claim can be rejected or held for review. If the backend has not returned a settled result, we keep showing it as pending. Offline payment acceptance cannot guarantee that every claim will later settle.
 
-> "Here's a merchant's collected-balance screen climbing as receipts land. *(merchant ledger card)*
-> Now we throw three **forged receipts** at the risk gate:
-> - a **replayed token** — same token, second device → rejected by the reuse rule;
-> - a **tampered amount** — ₹150 signed, ₹1,500 submitted → signature re-verification fails it;
-> - and an **unregistered device** pushing a clean-looking ₹50 → **held**, not approved,
->   because zero-history devices go to review, thanks to the low-signal guard.
->
-> Watch the fraud drill replay all eight scenarios and come back **8/8 green** —
-> the same input always yields the same decision."
+## Slide 5 — What the AI does (and does not do)
 
-*(Show `python fraud_drill.py` output: 8/8 PASSED.)*
+**On screen:** A risk-review example and the model version/health response. Add “synthetic evaluation data” visibly next to any metrics.
 
----
+**Say:**
 
-## 4. Metrics (3:45–4:45) — "measured, not vibes"
+> Paron's Python risk service runs a calibrated logistic-regression model trained on generated transaction scenarios. It looks at amount, velocity, token reuse, timing, and available history, and returns a score with reason contributions. Deterministic integrity rules and backend policy remain in control: a model score is not a payment authorization, and unavailable or weak signals can be held for review. Our published metrics are from synthetic holdout data, not real-world fraud outcomes.
 
-> "Track Two demanded measured numbers, so here they are — computed on a **held-out synthetic set**,
-> regenerated from a one-command pipeline in the repo:
+> *(Optional metric card, only after the hosted health endpoint confirms v2: On 3,554 eligible records in the synthetic holdout, model PR-AUC was 0.9105, precision 0.8169, and recall 0.786 at the report's threshold. These are simulated-scenario results, not production estimates.)*
 
-> *(show the table)*
->
-> | Metric | AI model | Rules baseline | Delta |
-> |---|---|---|---|
-> | Precision | 0.978 | 0.602 | +0.38 |
-> | Recall | 0.568 | 0.508 | +0.06 |
-> | F1 | 0.718 | 0.551 | +0.17 |
-> | PR-AUC | 0.709 | 0.445 | **+0.26** |
-> | FP cost at ₹500/FP | ₹2,500 | ₹67,000 | **−₹64,500** |
+## Slide 6 — PayPal and the product
 
-> "But the real number is the **production 3-state decision**: on the same held-out set,
-> the full rules + model + low-signal-guard path keeps **64% of fraud from ever being
-> auto-approved** — they're rejected or held. 81% of legitimate payments still flow
-> straight through to APPROVE. That's the risk manager working the way a risk manager
-> actually works: the loud attacks get hard-rejected by rules, the subtle ones get held
-> for a human, and the AI never auto-approves something it has no history to justify.
-> And the whole report is checked into `docs/reports/` so you can reproduce it yourself."
+**On screen:** PayPal Sandbox approval followed by the credited test-wallet balance; then the Android APK and service diagram.
 
-> *(show the 3-state table: fraud caught 0.642 / legit approved 0.809 / false-hold 0.106 / false-reject 0.084)*
+**Say:**
 
----
+> PayPal is the funding entry point in this prototype: the funding service creates a Sandbox order, verifies its completed capture, and then credits Paron's INR demo ledger using a disclosed fixed demo conversion rate. Merchant settlement in this prototype is an internal ledger update, not a PayPal payout. The product is a native Kotlin Android wallet backed by Spring Boot services, PostgreSQL, Redis, Kafka, and a Python FastAPI risk model. Render hosts the demo backend. The browser site is a judge-facing walkthrough; its nearby handoff is simulated.
 
-## 5. Failure & audit trace (4:45–5:30) — "what broke at 2 AM"
+## Close
 
-> "A risk manager is only as good as the failure it was built by. Three real ones:
->
-> One — a **double-settle bug** where the fraud service scored every transaction twice —
-> once gating settlement, once in a Kafka consumer nobody read. Two scores per receipt is how
-> silent risk slips in. Deleted the second path, made the decision single.
->
-> Two — **incremental settlement**: a refund settled a full reservation instead of only the spent
-> delta, leaking reserved money. Fixed with a delta-based settle and regression tests.
->
-> Three — this is my favorite — the **fraud drill we built to prove the AI layer** immediately
-> found that brand-new devices *auto-approved*. A perfect low-score, full-confidence approval,
-> and no history behind it. That's the exact gap the drill exists to catch. It's fixed with a
-> low-signal guard and two tests. The check-in is the evidence: `docs/reports/fraud-drill.md`.
->
-> Offline payments are trust, deferred. Paron bounds the money by construction and makes every
-> settlement decision auditable, deterministic, and defence-only."
+**On screen:** Paron logo, public repository, APK release, website, and demo-video links.
 
-*(End card: repo URL · track · "synthetic data only" · admission that labels are synthetic.)*
+**Say:**
 
----
+> Paron does not claim that offline money is risk-free. It makes the offline amount explicit, signs what the customer spent, and gives the backend a controlled way to verify and reconcile the claim. The result is a payment flow designed to keep moving when the signal does not.
 
-## Staging notes
+## Capture checklist
 
-- Total runtime: ~5:30. Trim Q2 walkthrough if needed — guard Q2 detail (low-signal) behind one line.
-- Record batch demo live (clean services, fresh Redis) so the numbers on screen match the log output.
-- Keep the "three words" hook (APPROVE · HOLD · REJECT) on screen throughout for narrative stickiness.
-- Final card must include the honest limitations line: **"labels are synthetic; real data requires recalibration"**.
+- Record a real Android app flow for onboarding, PayPal Sandbox funding, token reservation, offline payment, and post-reconnect sync.
+- Before recording, verify PayPal Sandbox order creation and capture succeed from the Java funding service. A standalone credential-check script is not proof that the app's backend integration works.
+- Show the payment as pending/accepted offline until the sync response confirms settlement.
+- Show that the merchant amount changes only after successful backend settlement; include one held/rejected case if the running environment is stable.
+- Confirm `/healthz` reports `lr-calibrated-v2.0.0-scenario` if describing v2 as the hosted model.
+- Keep PayPal secrets, private keys, passwords, and real personal data off screen.
+- Add captions or narration that distinguish real Android/backend steps from the browser simulation.
+- End with the public GitHub repo, MIT license, APK download, deployed website, and video URLs.
+
+## Submission criteria checklist
+
+| Requirement from the rules | Evidence in Paron | Status before submission |
+|---|---|---|
+| PayPal developer integration using Sandbox | Backend order creation, buyer approval, verified capture, and demo-ledger credit | Implemented in source; **verify the Java funding service succeeds end-to-end**. Recent local logs showed `invalid_client`, despite the separate PowerShell credential check passing. |
+| AI tool/model is part of the project | Trained logistic-regression risk model, Python FastAPI scoring service, fraud policy, synthetic evaluation artifacts | Implemented. Label metrics as synthetic and distinguish local v2 artifacts from the hosted model until `/healthz` confirms v2. |
+| Project installs and works on its stated platform | Native Android app and published debug APK; backend uses Render services | Android build has succeeded, but submission readiness requires a clean install and a complete live run. Do not rely on the APK existing as proof that remote services work. |
+| Video demonstrates the end-to-end project | The sequence above covers funding through offline acceptance and eventual sync | **Still needs recording after PayPal and backend flow are verified.** |
+| Problem, audience, and value are clear | Campus canteen/customer story; customers and merchants facing unreliable connectivity | Addressed in this pitch. |
+| Public code repository | README links `github.com/diyaj14/paron` | Verify the repository opens in a signed-out/private browser. |
+| Approved OSI license | MIT `LICENSE` | Present. |
+| README setup, PayPal/AI use, tools and integrations | README has setup, service map, PayPal Sandbox, AI section, and Render mention | Present; replace the website placeholder and add real screenshots/video link. |
+| Significant update during the submission period, if the project predates it | Git history shows recent work, including Android, PayPal, and website changes | Confirm the official submission-period start date and cite the relevant commits in the submission. Local commit dates alone do not prove they fall within that period. |
+| Sponsor prize rules, if entering one | PayPal and Render are named integrations | Read the separate requirements for the specific sponsor prize; general integration alone does not establish eligibility. |
+
+## Claims to avoid
+
+- Do not say PayPal holds or reserves the offline amount. PayPal Sandbox funds the Paron test wallet; Paron's ledger reserves the allowance.
+- Do not call the offline merchant acknowledgement a completed payment or guaranteed settlement.
+- Do not say AI prevents fraud or independently approves payments. It supplies a risk score to a policy-controlled review path.
+- Do not present synthetic-data precision/recall as production performance.
+- Do not say the browser demo performs real Bluetooth or Android hardware signing; its local consumer/merchant handoff is simulated.
+- Do not describe an internal merchant-ledger credit as a PayPal payout or bank settlement.

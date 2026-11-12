@@ -367,6 +367,7 @@ fun WalletScreen(
     onSetServerUrl: (String) -> Unit,
     onTransfer: () -> Unit,
     onPaypalTopUp: (String) -> Unit,
+    onRetryPaypalCapture: () -> Unit,
     onHistory: () -> Unit,
     onClearHistory: () -> Unit,
     onMerchant: (WalletTransaction) -> Unit
@@ -406,6 +407,33 @@ fun WalletScreen(
             )
         }
 
+        if (state.activeTokenId == null) {
+            Text("Reserve for offline use", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
+            SectionCard {
+                Text("No active offline token. Set aside money from your online balance here; PayPal top-up is optional.", color = MutedNavy, fontSize = 12.sp, lineHeight = 18.sp)
+                OutlinedTextField(
+                    value = reserveAmount,
+                    onValueChange = { reserveAmount = it.filter(Char::isDigit).take(6) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    singleLine = true,
+                    prefix = { Text("₹") },
+                    label = { Text("Offline spending amount") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = YieldBlue,
+                        unfocusedBorderColor = Color(0xFFD7E5EF)
+                    )
+                )
+                PrimaryAction(
+                    if (state.isReserving) "Reserving..." else "Reserve ₹$reserveAmount for offline use",
+                    onClick = { onReserve(reserveAmount) },
+                    modifier = Modifier.padding(top = 10.dp),
+                    enabled = reserveAmount.toDoubleOrNull()?.let { it > 0 && it <= state.onlineBalance } == true &&
+                        !state.isReserving && state.authenticated && state.internetAvailable
+                )
+            }
+        }
+
         Text("Add funds with PayPal", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
         SectionCard {
             Text("PayPal Sandbox checkout", color = MutedNavy, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
@@ -422,13 +450,22 @@ fun WalletScreen(
                 if (state.isFunding) "Opening PayPal…" else "Continue with PayPal Sandbox",
                 onClick = { onPaypalTopUp(paypalAmount) },
                 modifier = Modifier.padding(top = 10.dp),
-                enabled = !state.isFunding && state.authenticated && state.internetAvailable && paypalAmount.toDoubleOrNull()?.let { it > 0 } == true
+                enabled = !state.isFunding && state.pendingPaypalOrderId == null && state.authenticated && state.internetAvailable && paypalAmount.toDoubleOrNull()?.let { it > 0 } == true
             )
             Text("Sandbox only. Demo conversion: USD 1 = ₹85. Wallet updates after backend capture.", color = MutedNavy, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+            if (state.pendingPaypalOrderId != null) {
+                Text("An earlier PayPal approval is awaiting confirmation. Retry the same order; don't approve another payment yet.", color = MutedNavy, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 10.dp))
+                PrimaryAction(
+                    if (state.isFunding) "Checking payment..." else "Retry PayPal confirmation",
+                    onClick = onRetryPaypalCapture,
+                    modifier = Modifier.padding(top = 8.dp),
+                    enabled = !state.isFunding && state.authenticated && state.internetAvailable
+                )
+            }
         }
 
         // Active Offline Token Info
-        SectionCard(Modifier.padding(top = 16.dp)) {
+        if (state.activeTokenId != null) SectionCard(Modifier.padding(top = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
 //                Icon(
 //                    if (state.activeOfflineToken != null) Icons.Rounded.CheckCircle else Icons.Rounded.WifiOff,
@@ -463,32 +500,6 @@ fun WalletScreen(
             }
             if (state.tokenExpiresAt != null) {
                 Text("Expires: ${state.tokenExpiresAt}", color = MutedNavy, fontSize = 11.sp)
-            }
-        }
-
-        if (state.activeTokenId == null) {
-            Text("Reserve funds", color = TrustIndigo, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
-            SectionCard {
-            OutlinedTextField(
-                value = reserveAmount,
-                onValueChange = { reserveAmount = it.filter(Char::isDigit).take(6) },
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                singleLine = true,
-                prefix = { Text("₹") },
-                placeholder = { Text("Amount to reserve") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = YieldBlue,
-                    unfocusedBorderColor = Color(0xFFD7E5EF)
-                )
-            )
-
-            PrimaryAction(
-                if (state.isReserving) "Reserving..." else "Reserve",
-                onClick = { onReserve(reserveAmount) },
-                modifier = Modifier.padding(top = 12.dp),
-                enabled = reserveAmount.isNotBlank() && !state.isReserving
-            )
             }
         }
 
