@@ -177,6 +177,7 @@ fun OfflinePayApp(state: AppUiState, viewModel: OfflinePayViewModel) {
                     onWallet = { navController.navigate("wallet") },
                     onHistory = { navController.navigate("history") },
                     onOfflinePay = { navController.navigate("offline") },
+                    onReceiveQr = { navController.navigate("scanner") },
                     onSync = viewModel::syncNow,
                     onToggleInternet = { viewModel.setInternetAvailable(!state.internetAvailable) },
                     onToggleBluetoothReceive = {

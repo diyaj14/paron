@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.QrCode
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.Visibility
@@ -87,6 +88,7 @@ fun HomeScreen(
     onWallet: () -> Unit,
     onHistory: () -> Unit,
     onOfflinePay: () -> Unit,
+    onReceiveQr: () -> Unit,
     onSync: () -> Unit,
     onToggleInternet: () -> Unit,
     onToggleBluetoothReceive: () -> Unit,
@@ -189,12 +191,13 @@ fun HomeScreen(
                 Spacer(Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     HomeAction("Pay Offline", Icons.Rounded.WifiOff, onOfflinePay, Modifier.weight(1f))
+                    HomeAction("Receive by QR", Icons.Rounded.QrCode, onReceiveQr, Modifier.weight(1f))
                     HomeAction(
-                        if (state.bluetoothListening) "Receiving Offline" else "Receive Offline\n(Bluetooth)",
+                        if (state.bluetoothListening) "Receiving\nBluetooth" else "Receive by\nBluetooth",
                         Icons.Rounded.Bluetooth,
                         onToggleBluetoothReceive,
                         Modifier.weight(1f)

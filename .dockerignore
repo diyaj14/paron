@@ -12,3 +12,11 @@ pwa
 ml
 node_modules
 __pycache__
+
+# The risk-model image needs the promoted model package, but not training data/code.
+!ml/
+ml/*
+!ml/artifacts/
+ml/artifacts/*
+!ml/artifacts/scenario-v2/
+!ml/artifacts/scenario-v2/**
