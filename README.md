@@ -39,19 +39,19 @@ Open the API gateway and PayPal funding health checks first and wait for both to
 
 ## Mobile app screenshots
 
-Add Android screenshots to docs/screenshots/ and replace each placeholder below with an image. For example: `![Paron wallet](docs/screenshots/wallet.png)`
-
 | Onboarding | Home |
 |---|---|
-| *Screenshot placeholder — docs/screenshots/onboarding.png* | *Screenshot placeholder — docs/screenshots/home.png* |
+| <img src="docs/screenshots/onboarding.png" alt="Paron onboarding screen" width="220"> | <img src="docs/screenshots/home.png" alt="Paron home screen with online and offline balances" width="220"> |
 
 | Wallet and PayPal Sandbox | Offline payment |
 |---|---|
-| *Screenshot placeholder — docs/screenshots/wallet-paypal.png* | *Screenshot placeholder — docs/screenshots/offline-payment.png* |
+| <img src="docs/screenshots/wallet.png" alt="Paron wallet with PayPal Sandbox top-up and active offline token" width="220"> | <img src="docs/screenshots/offline-payment.png" alt="Signed offline payment QR ready for handoff" width="220"> |
 
 | Payment history and sync | Risk review |
 |---|---|
-| *Screenshot placeholder — docs/screenshots/history-sync.png* | *Screenshot placeholder — docs/screenshots/risk-review.png* |
+| <img src="docs/screenshots/history-sync.png" alt="Paron transaction history showing an offline receipt and ledger reserve" width="220"> | <img src="docs/screenshots/risk-review.png" alt="Paron risk screen with queued receipt and sync retry status" width="220"> |
+
+The risk-review image currently shows a sync retry caused by an expired demo session. Replace it with a successful sync/reconciliation screenshot after rebuilding and reinstalling the updated debug app.
 
 ## What the app does
 

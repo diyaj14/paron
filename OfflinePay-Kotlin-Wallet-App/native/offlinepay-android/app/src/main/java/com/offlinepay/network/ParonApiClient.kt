@@ -1,6 +1,7 @@
 package com.offlinepay.network
 
 import android.content.Context
+import com.offlinepay.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -54,6 +55,7 @@ class ParonApiClient(private val context: Context) {
     companion object {
         private const val PREFS_NAME = "offlinepay_network_settings"
         private const val KEY_BASE_URL = "api_base_url"
+        private const val DEMO_OTP = "123456"
 
         const val DEFAULT_BASE_URL = "http://10.0.2.2:8080"
         const val PHYSICAL_DEVICE_URL = "http://192.168.1.6:8080"
@@ -282,6 +284,10 @@ class ParonApiClient(private val context: Context) {
         }
 
     private fun httpGet(urlStr: String, userId: String): String {
+        return retryAfterDemoSessionRenewal(userId) { httpGetOnce(urlStr) }
+    }
+
+    private fun httpGetOnce(urlStr: String): String {
         val url = URL(urlStr)
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
@@ -304,6 +310,10 @@ class ParonApiClient(private val context: Context) {
     }
 
     private fun httpGetOptional(urlStr: String, userId: String): String? {
+        return retryAfterDemoSessionRenewal(userId) { httpGetOptionalOnce(urlStr) }
+    }
+
+    private fun httpGetOptionalOnce(urlStr: String): String? {
         val url = URL(urlStr)
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
@@ -322,7 +332,38 @@ class ParonApiClient(private val context: Context) {
         throw Exception("API GET error ($code): ${readableError(error)}")
     }
 
-    private fun httpPost(urlStr: String, body: String, userId: String): String = httpPostRaw(urlStr, body, true)
+    private fun httpPost(urlStr: String, body: String, userId: String): String =
+        retryAfterDemoSessionRenewal(userId) { httpPostRaw(urlStr, body, true) }
+
+    /**
+     * Demo auth sessions are short lived. Renew only when the gateway explicitly
+     * rejects the session JWT, then retry the same request once. Offline receipts
+     * remain queued on-device if renewal or the retry fails.
+     */
+    private fun <T> retryAfterDemoSessionRenewal(userId: String, request: () -> T): T {
+        try {
+            return request()
+        } catch (firstFailure: Exception) {
+            val isExpiredGatewaySession = BuildConfig.DEMO_MODE &&
+                firstFailure.message?.let {
+                    it.contains("API POST error (401): Invalid or expired token") ||
+                        it.contains("API GET error (401): Invalid or expired token")
+                } == true
+            if (!isExpiredGatewaySession) throw firstFailure
+
+            renewDemoSession(userId)
+            return request()
+        }
+    }
+
+    private fun renewDemoSession(userId: String) {
+        val body = JSONObject()
+            .put("phoneNumber", userId)
+            .put("code", DEMO_OTP)
+            .toString()
+        val response = httpPostRaw(gatewayUrl("/api/v1/auth/otp/verify"), body, false)
+        accessToken = JSONObject(response).getString("accessToken")
+    }
 
     private fun httpPostRaw(urlStr: String, body: String, authenticated: Boolean): String {
         val url = URL(urlStr)
