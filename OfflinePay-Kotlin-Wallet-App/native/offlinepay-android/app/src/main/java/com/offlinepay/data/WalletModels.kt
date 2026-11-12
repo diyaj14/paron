@@ -10,6 +10,7 @@ enum class TransactionStatus {
     COMPLETED,
     PENDING_VERIFICATION,
     SYNCED,
+    HELD_FOR_REVIEW,
     FAILED
 }
 
@@ -68,6 +69,6 @@ data class AppUiState(
     val bluetoothListening: Boolean = false,
     val lastQrPayload: String? = null,
     val syncEvents: List<SyncEvent> = emptyList(),
-    val serverBaseUrl: String = "http://10.0.2.2:8080",
+    val serverBaseUrl: String = "https://paron-api.onrender.com",
     val transactions: List<WalletTransaction> = emptyList()
 )

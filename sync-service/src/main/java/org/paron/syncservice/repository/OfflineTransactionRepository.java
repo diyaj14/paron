@@ -16,6 +16,8 @@ public interface OfflineTransactionRepository extends JpaRepository<OfflineTrans
 
     List<OfflineTransaction> findByStatus(TransactionStatus status);
 
+    boolean existsByDeviceTransactionId(String deviceTransactionId);
+
     /* The dispute arbiter loads receipts by their device-generated id. */
     Optional<OfflineTransaction> findByDeviceTransactionId(String deviceTransactionId);
 }

@@ -49,7 +49,15 @@ public class SettlementWriter implements ItemWriter<SettlementContext> {
             // Already rejected or failed during processing — nothing to
             // settle, just persist the outcome the processor decided on.
             if (context.getReservationID() == null) {
-                transactionRepository.save(transaction);
+                try {
+                    // Flush now so DB constraint failures are caught before
+                    // the batch chunk commits. Redis is outside this DB
+                    // transaction, so release its claim when persistence fails.
+                    transactionRepository.saveAndFlush(transaction);
+                } catch (RuntimeException persistenceError) {
+                    idempotencyService.releaseClaim(transaction.getDeviceTransactionId());
+                    throw persistenceError;
+                }
                 log.info("Saved non-settled transaction. status={}, deviceTransactionId={}",
                         transaction.getStatus(), transaction.getDeviceTransactionId());
                 continue;

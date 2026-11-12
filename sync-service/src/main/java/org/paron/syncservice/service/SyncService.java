@@ -49,6 +49,23 @@ public class SyncService {
                     continue;
                 }
 
+                // The Android app may retry a receipt whose previous HTTP
+                // response was lost. If this same user's receipt is already
+                // stored, acknowledge it again but do not enqueue it twice.
+                var existing = transactionRepository.findByDeviceTransactionId(txn.getDeviceTransactionId());
+                if (existing.isPresent()) {
+                    if (!userId.equals(existing.get().getUserId())) {
+                        failedIds.add(txn.getDeviceTransactionId());
+                        log.warn("Refusing duplicate transaction ID owned by another user. deviceTransactionId={}",
+                                txn.getDeviceTransactionId());
+                    } else {
+                        acceptedIds.add(txn.getDeviceTransactionId());
+                        log.info("Duplicate sync request acknowledged; transaction already stored. deviceTransactionId={}, status={}",
+                                txn.getDeviceTransactionId(), existing.get().getStatus());
+                    }
+                    continue;
+                }
+
                 transactionProducer.publish(txn);
                 acceptedIds.add(txn.getDeviceTransactionId());
                 log.debug("Published to Kafka. deviceTransactionId={}, userId={}",

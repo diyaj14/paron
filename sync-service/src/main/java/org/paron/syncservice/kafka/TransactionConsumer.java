@@ -41,6 +41,16 @@ public class TransactionConsumer {
             return;   // silently skip — this is expected behavior for a retry, not an error
         }
 
+        // Redis is claimed later by the settlement processor. Until then,
+        // a client retry or Kafka replay can pass the Redis check even though
+        // the first delivery is already stored. Check Postgres before insert;
+        // the unique constraint below remains the final race-safe guard.
+        if (transactionRepository.existsByDeviceTransactionId(dto.getDeviceTransactionId())) {
+            log.info("Duplicate Kafka delivery ignored; transaction is already stored. deviceTransactionId={}",
+                    dto.getDeviceTransactionId());
+            return;
+        }
+
         OfflineTransaction transaction = OfflineTransaction.builder()
                 .deviceTransactionId(dto.getDeviceTransactionId())
                 .userId(dto.getUserId())
@@ -58,10 +68,9 @@ public class TransactionConsumer {
             log.info("Transaction saved with RECEIVED status. deviceTransactionId={}",
                     dto.getDeviceTransactionId());
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            // The DB's unique constraint on device_transaction_id caught a
-            // duplicate that slipped past the Redis check (e.g. Redis was
-            // briefly unavailable). This is the "belt and suspenders" backup.
-            log.warn("Duplicate transaction caught by DB unique constraint. deviceTransactionId={}",
+            // The DB's unique constraint remains the final guard if two
+            // deliveries race between the existence check and the insert.
+            log.info("Concurrent duplicate Kafka delivery ignored by DB unique constraint. deviceTransactionId={}",
                     dto.getDeviceTransactionId());
         }
     }

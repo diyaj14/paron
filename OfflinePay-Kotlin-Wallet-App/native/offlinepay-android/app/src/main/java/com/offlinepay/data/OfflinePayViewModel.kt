@@ -33,11 +33,6 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
     private val _uiState = MutableStateFlow(loadInitialState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
-    init {
-        // Automatically try loading real balance on startup
-        refreshBalancesFromBackend()
-    }
-
     private fun currentFormattedTime(): String {
         return try {
             LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM, hh:mm a"))
@@ -124,12 +119,13 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             apiClient.createDemoSession(phoneNumber, code).onSuccess { session ->
-                _uiState.update {
-                    it.copy(
-                        authenticated = true,
-                        message = "Signed in as ${session.userId}."
-                    )
-                }
+                val authenticatedState = _uiState.value.copy(
+                    phoneNumber = session.userId,
+                    authenticated = true,
+                    message = "Signed in as ${session.userId}."
+                )
+                _uiState.value = authenticatedState
+                persistState(authenticatedState)
                 refreshBalancesFromBackend()
                 onAuthenticated()
                 if (_uiState.value.internetAvailable && _uiState.value.transactions.any {
@@ -179,13 +175,13 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
      * 1. Query live balance from Ledger Service.
      */
     fun refreshBalancesFromBackend() {
+        if (!_uiState.value.authenticated) return
         // The auth-service JWT subject is the verified phone number. Keep every
         // ledger call tied to that subject; a display name is not an account ID.
         val currentUserId = _uiState.value.phoneNumber.ifBlank { return }
         viewModelScope.launch {
-            apiClient.createTestAccount(currentUserId, 1000.0)
-            val balanceRes = apiClient.fetchBalance(currentUserId)
-            balanceRes.onSuccess { bal ->
+            val accountRes = apiClient.createTestAccount(currentUserId, 1000.0)
+            accountRes.onSuccess { bal ->
                 val activeTokenResult = apiClient.fetchActiveOfflineToken(currentUserId, getDeviceId())
                 val restoredToken = activeTokenResult.getOrNull()
                 val updated = _uiState.value.let { current ->
@@ -216,6 +212,8 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 _uiState.value = updated
                 persistState(updated)
+            }.onFailure { error ->
+                _uiState.update { it.copy(message = "Could not load wallet for $currentUserId: ${error.message}") }
             }
         }
     }
@@ -677,6 +675,10 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun syncNow() {
         val current = _uiState.value
+        // Reconnect, QR receive, sign-in and the Sync button can all request
+        // sync close together. Let the active poll finish instead of posting
+        // the same local queue more than once concurrently.
+        if (current.isSyncing) return
         val pending = current.transactions.filter {
             it.status == TransactionStatus.PENDING_VERIFICATION && it.offlineToken != null
         }
@@ -765,7 +767,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                             .filter { it.deviceTransactionId in accepted }
                             .associate { it.deviceTransactionId to it.status }
                     }
-                    if (accepted.all { settledStatuses[it] in setOf("SETTLED", "REJECTED", "HELD_FOR_REVIEW") }) {
+                    if (accepted.all { settledStatuses[it] in setOf("SETTLED", "REJECTED", "FAILED", "HELD_FOR_REVIEW") }) {
                         break
                     }
                 }
@@ -780,7 +782,7 @@ class OfflinePayViewModel(application: Application) : AndroidViewModel(applicati
                         when (settledStatuses[txn.id]) {
                             "SETTLED" -> txn.copy(status = TransactionStatus.COMPLETED, dateLabel = "Settled on Bank Ledger")
                             "REJECTED" -> txn.copy(status = TransactionStatus.FAILED, dateLabel = "Rejected by sync service")
-                            "HELD_FOR_REVIEW" -> txn.copy(dateLabel = "Held for review")
+                            "HELD_FOR_REVIEW" -> txn.copy(status = TransactionStatus.HELD_FOR_REVIEW, dateLabel = "Held for review")
                             else -> txn
                         }
                     },

@@ -508,22 +508,28 @@ fun WalletScreen(
         SectionCard {
             Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryAction(
-                    "Emulator (10.0.2.2)",
+                    "Hosted API (Render)",
+                    onClick = {
+                        customUrl = "https://paron-api.onrender.com"
+                        onSetServerUrl(customUrl)
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                PrimaryAction(
+                    "Android Emulator",
                     onClick = {
                         customUrl = "http://10.0.2.2:8080"
                         onSetServerUrl(customUrl)
                     },
                     modifier = Modifier.weight(1f)
                 )
-                PrimaryAction(
-                    "Wi-Fi (192.168.1.6)",
-                    onClick = {
-                        customUrl = "http://192.168.1.6:8080"
-                        onSetServerUrl(customUrl)
-                    },
-                    modifier = Modifier.weight(1f)
-                )
             }
+            Text(
+                "On a physical phone, use Hosted API or enter your computer’s current Wi-Fi IP (phone and computer must share Wi-Fi). 10.0.2.2 is emulator-only.",
+                color = MutedNavy,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 8.dp)
+            )
             OutlinedTextField(
                 value = customUrl,
                 onValueChange = { customUrl = it },
@@ -726,6 +732,7 @@ fun TransactionLine(transaction: WalletTransaction, onClick: () -> Unit, showSta
                 Spacer(Modifier.height(4.dp))
                 val statusLabel = when (transaction.status) {
                     TransactionStatus.PENDING_VERIFICATION -> "Pending Sync (Offline)"
+                    TransactionStatus.HELD_FOR_REVIEW -> "Needs review"
                     TransactionStatus.FAILED -> if (transaction.method.contains("Online", ignoreCase = true)) {
                         "Online payment unavailable — no debit"
                     } else {

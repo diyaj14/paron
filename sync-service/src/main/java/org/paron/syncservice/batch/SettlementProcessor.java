@@ -64,7 +64,10 @@ public class SettlementProcessor implements ItemProcessor<OfflineTransaction,Set
                 log.warn("Fraud check holding transaction for review. decision={}, deviceTransactionId={}",
                         fraudResult.getDecision(), transaction.getDeviceTransactionId());
                 transaction.setStatus(TransactionStatus.HELD_FOR_REVIEW);
-                transaction.setRejectionReason("FRAUD_HOLD: " + (fraudResult.getReasonCodes() != null ? String.join(",", fraudResult.getReasonCodes()) : fraudResult.getReason()));
+                String reviewReason = fraudResult.getReasonCodes() != null && !fraudResult.getReasonCodes().isEmpty()
+                        ? String.join(",", fraudResult.getReasonCodes())
+                        : fraudResult.getReason();
+                transaction.setRejectionReason("FRAUD_HOLD: " + (reviewReason != null ? reviewReason : "unspecified"));
                 return new SettlementContext(transaction, null);
             }
 

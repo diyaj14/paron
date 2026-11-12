@@ -57,13 +57,24 @@ class ParonApiClient(private val context: Context) {
         private const val KEY_BASE_URL = "api_base_url"
         private const val DEMO_OTP = "123456"
 
-        const val DEFAULT_BASE_URL = "http://10.0.2.2:8080"
-        const val PHYSICAL_DEVICE_URL = "http://192.168.1.6:8080"
+        // The Render gateway works from both physical devices and emulators.
+        // 10.0.2.2 is only valid from the Android emulator, never from a phone.
+        const val DEFAULT_BASE_URL = "https://paron-api.onrender.com"
+        const val EMULATOR_BASE_URL = "http://10.0.2.2:8080"
+        private const val LEGACY_WIFI_BASE_URL = "http://192.168.1.6:8080"
     }
 
     var baseUrl: String
-        get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_BASE_URL, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL
+        get() {
+            val preferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val savedUrl = preferences.getString(KEY_BASE_URL, null)?.trim()?.removeSuffix("/")
+            // Upgrade existing installs that still have the emulator or stale LAN URL saved.
+            if (savedUrl.isNullOrBlank() || savedUrl == EMULATOR_BASE_URL || savedUrl == LEGACY_WIFI_BASE_URL) {
+                preferences.edit().putString(KEY_BASE_URL, DEFAULT_BASE_URL).apply()
+                return DEFAULT_BASE_URL
+            }
+            return savedUrl
+        }
         set(value) {
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
@@ -102,6 +113,9 @@ class ParonApiClient(private val context: Context) {
 
     suspend fun createTestAccount(userId: String, initialBalance: Double = 1000.0): Result<AccountBalance> =
         withContext(Dispatchers.IO) {
+            val existingBalance = fetchBalance(userId)
+            if (existingBalance.isSuccess) return@withContext existingBalance
+
             runCatching {
                 val url = gatewayUrl("/api/v1/ledger/accounts/create-test-account")
                 val body = JSONObject().apply {
