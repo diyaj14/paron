@@ -47,9 +47,17 @@ public class SettlementProcessor implements ItemProcessor<OfflineTransaction,Set
                 idempotencyService.releaseClaim(transaction.getDeviceTransactionId());
                 return new SettlementContext(transaction, null);
             }
-            transaction.setUserId(tokenResult.getUserId());
-
-            FraudCheckResult fraudResult = fraudCheckClient.check(transaction);
+            // Fraud scoring needs the payer (token owner), but the transaction
+            // row must remain associated with the authenticated submitter so
+            // that device can poll and see the final settlement status.
+            String submitterUserId = transaction.getUserId();
+            FraudCheckResult fraudResult;
+            try {
+                transaction.setUserId(tokenResult.getUserId());
+                fraudResult = fraudCheckClient.check(transaction);
+            } finally {
+                transaction.setUserId(submitterUserId);
+            }
             transaction.setFraudScore(fraudResult.getScore());
 
             if("HOLD_FOR_REVIEW".equals(fraudResult.getDecision())){

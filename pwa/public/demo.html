@@ -1,19 +1,89 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffbee"><link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./styles.css"><title>Experience Paron</title></head>
-<body><header class="demo-nav"><a class="brand" href="./index.html"><span class="brand-mark">P</span>paron</a><a class="back-link" href="./index.html">← &nbsp;Back to overview</a><span class="demo-nav-title">INTERACTIVE PAYMENT DEMO</span></header>
-<main class="demo-shell">
-  <section class="demo-heading"><div><span class="eyebrow">PARON / EXPERIENCE</span><h1>One payment. <em>Two perspectives.</em></h1><p>Set an offline spending limit, make a sample payment, reconnect, and see whether the backend records it.</p></div><div class="mode-switch"><span class="switch-caption">DEMO MODE</span><label><input id="backend-mode" type="checkbox" checked><span class="switch-ui"></span><span>Use connected demo services</span></label><small id="mode-description">Connected demo services · reserve to start PayPal Sandbox</small></div></section>
-  <div id="truth-banner" class="truth-banner backend-banner"><b>CONNECTED DEMO</b><span>Reserve opens PayPal Sandbox. Offline handoff is a browser simulation; Sandbox test funds only.</span></div>
-  <section class="setup-card"><div class="setup-title"><div><span class="step-kicker">START THE DEMO</span><h2>Reserve an offline spending limit</h2></div><span id="network-indicator" class="status-pill"><i></i><span id="connection-state">Online</span></span></div>
-   <details class="connection-settings"><summary>Service settings (preconfigured for judges)</summary><div class="setup-grid"><label>Customer ID<input id="user-id" value="demo-customer"></label><label>Backend URL<input id="api-base" value="https://paron-api.onrender.com" placeholder="https://your-api-gateway.onrender.com"></label><label>PayPal funding service URL (optional)<input id="funding-api-base" value="https://paron-paypal-funding.onrender.com" placeholder="https://your-paypal-funding.onrender.com"><small>Preconfigured for the PayPal service used by this demo.</small></label><label>Demo username<input id="demo-username" value="demo-customer"></label><label>Demo password<input id="demo-password" type="password" value="123456"></label></div></details><input id="session-token" type="hidden"><div class="setup-actions"><label class="reserve-control">Set aside <span>₹</span><input id="new-token-amount" type="number" min="1" value="500"><span>for</span><input id="expiry-hours" type="number" min="1" max="24" value="6"><span>hours</span></label><button id="request-token" class="button button-primary" type="button">Reserve with PayPal Sandbox <span>→</span></button></div><div class="wallet-summary"><div><small>WALLET BALANCE</small><strong id="account-total">₹1,000.00</strong></div><div><small>SET ASIDE FOR OFFLINE</small><strong id="locked-offline-amount">₹500.00</strong></div><div><small>LEFT FOR ONLINE USE</small><strong id="available-online-amount">₹500.00</strong></div><div><small>OFFLINE LIMIT</small><strong id="token-state">NOT RESERVED</strong></div></div><div id="paypal-button-container"></div><p id="paypal-status" class="microcopy">Reserving opens PayPal Sandbox automatically, then confirms the offline limit. Sandbox funds only.</p></section>
-  <div class="flow-connector"><span>LIMIT SET ASIDE</span><i></i><span>INTERNET LOST</span><i></i><span>INTERNET RESTORED</span></div>
-  <section class="perspectives"><article class="side-card consumer-card"><div class="side-heading"><div class="side-avatar consumer-avatar">C</div><div><span class="step-kicker">SIDE A</span><h2>Consumer</h2></div><span class="role-tag">WALLET</span></div><div class="offline-callout"><span class="online-dot"></span><span id="connection-state-copy">Connected · ready to go offline</span><button id="demo-network-toggle" type="button">Simulate offline</button></div>
-    <div class="consumer-balance"><div><small>LEFT IN OFFLINE SPENDING LIMIT</small><strong id="offline-allowance-display">₹500.00</strong></div><span class="lock-symbol">◈</span></div>
-    <label class="field-label">PAYMENT AMOUNT<input id="payment-amount" type="number" min="1" step="0.01" value="125"></label><label class="field-label">MERCHANT<select id="merchant-picker"><option value="merchant-cafe-002">Coffee House</option><option value="merchant-demo-001">Metro Transit</option><option value="merchant-store-003">QuickMart</option></select></label><input id="merchant-id" type="hidden" value="merchant-cafe-002"><div class="receipt-preview"><div><span>Left after this payment</span><b id="remaining-limit-display">₹375.00</b></div><div><span>Receipt check</span><b>Digital signature · sample</b></div></div><input id="simulation" type="checkbox" checked hidden><p id="ble-status" class="microcopy">This website simulates the nearby handoff. It does not use Bluetooth or Android secure hardware.</p><button id="connect-merchant" type="button" class="button button-quiet full">Prepare merchant view</button><button id="pay" type="button" class="button button-primary full">Make sample offline payment · ₹125 <span>→</span></button>
-  </article>
-  <div class="handoff" aria-hidden="true"><span>RECEIPT</span><div>→</div><small>LOCAL HANDOFF</small></div>
-  <article class="side-card merchant-card"><div class="side-heading"><div class="side-avatar merchant-avatar">M</div><div><span class="step-kicker">SIDE B</span><h2>Merchant</h2></div><span class="role-tag">MERCHANT</span></div><div class="merchant-brand"><div class="merchant-logo">⌂</div><div><strong id="merchant-display-name">Coffee House</strong><small id="merchant-display-id">merchant-cafe-002</small></div></div><div class="merchant-metrics"><div><small>RECEIVED OFFLINE</small><strong id="merchant-pending-total">₹0.00</strong></div><div><small>ADDED TO ACCOUNT</small><strong id="merchant-settled-total">₹0.00</strong></div></div><div class="merchant-section-title"><span>PAYMENT RECEIPTS</span><span id="receipt-count">0</span></div><div id="merchant-inbox" class="merchant-inbox"><div class="empty-inbox"><span>⌁</span><p>Payment receipts will appear here.</p></div></div><div class="settlement-note"><span>ⓘ</span><p>The merchant first receives a local payment record. Paron’s online service checks it after syncing. An amount added to the merchant’s account is not the same as a bank transfer.</p></div><button id="sync-now" class="button button-dark full" type="button">Reconnect and send receipts <span>⟳</span></button><div id="sync-timeline-container" class="sync-timeline-card" hidden><div class="timeline-label">ONLINE RECEIPT CHECK</div><div class="timeline-steps"><div id="step-upload" class="timeline-step">Receipt sent</div><div id="step-sig" class="timeline-step">Signature checked</div><div id="step-cap" class="timeline-step">Limit checked</div><div id="step-settle" class="timeline-step">Result</div></div><p id="sync-timeline-status" class="hint"></p></div>
-  </article></section>
-  <section class="activity-card"><div class="activity-head"><div><span class="step-kicker">LIVE DEMO STATE</span><h2>Transaction activity</h2></div><span class="local-storage-tag">Saved in this browser</span></div><div id="transactions" class="transactions"><p class="empty-inbox">No transactions yet.</p></div></section>
-  <details class="advanced"><summary>What is real in this demo?</summary><div><p><b>Local simulation:</b> the sample wallet, offline limit, payment receipt, and merchant view are stored only in this browser. They do not represent real money or real payments.</p><p><b>Connected services:</b> if configured, the website can sign in, request a real demo allowance, open PayPal Sandbox checkout, and send receipts to your backend. The merchant is shown as settled only after the backend confirms it.</p><p><b>Phone connection:</b> this website does not use Bluetooth or Android secure hardware. Its nearby payment animation is simulated. Use the Android app to demonstrate the phone flow.</p></div></details>
-</main><p id="notice" class="notice" role="status" aria-live="polite">Ready when you are.</p><script src="./src/app.js"></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#fffbee">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Experience Paron</title>
+</head>
+<body>
+  <header class="demo-nav">
+    <a class="brand" href="./index.html"><span class="brand-mark">P</span>paron</a>
+    <a class="back-link" href="./index.html">← &nbsp;Back to overview</a>
+    <span class="demo-nav-title">INTERACTIVE PAYMENT DEMO</span>
+  </header>
+  <main class="demo-shell">
+    <section class="demo-heading">
+      <div>
+        <span class="eyebrow">PARON / EXPERIENCE</span>
+        <h1>One payment. <em>Two perspectives.</em></h1>
+        <p>Set a sample offline limit, make a simulated payment, reconnect, and follow the example receipt.</p>
+      </div>
+      <div class="mode-switch">
+        <span class="switch-caption">DEMO MODE</span>
+        <small id="mode-description">Local simulation · no connected services or real money</small>
+      </div>
+    </section>
+
+    <div id="truth-banner" class="truth-banner simulation-banner">
+      <b>SIMULATION ONLY</b>
+      <span>All balances, receipts, and sync results are sample data saved in this browser. No checkout, backend request, or real money movement occurs.</span>
+    </div>
+
+    <section class="setup-card">
+      <div class="setup-title">
+        <div><span class="step-kicker">START THE DEMO</span><h2>Set a sample offline spending limit</h2></div>
+        <span id="network-indicator" class="status-pill"><i></i><span id="connection-state">Online · simulated</span></span>
+      </div>
+      <div class="setup-actions">
+        <label class="reserve-control">Set aside <span>₹</span><input id="new-token-amount" type="number" min="1" value="500"><span>for</span><input id="expiry-hours" type="number" min="1" max="24" value="6"><span>hours</span></label>
+        <button id="request-token" class="button button-primary" type="button">Set aside sample limit <span>→</span></button>
+      </div>
+      <div class="wallet-summary">
+        <div><small>EXAMPLE WALLET BALANCE</small><strong id="account-total">₹1,000.00</strong></div>
+        <div><small>SET ASIDE IN THIS DEMO</small><strong id="locked-offline-amount">₹0.00</strong></div>
+        <div><small>LEFT FOR ONLINE USE</small><strong id="available-online-amount">₹1,000.00</strong></div>
+        <div><small>OFFLINE LIMIT</small><strong id="token-state">NO SAMPLE LIMIT</strong></div>
+      </div>
+      <p id="allowance-status" class="microcopy">Sample allowance only · no payment service is connected.</p>
+    </section>
+
+    <div class="flow-connector"><span>LIMIT SET ASIDE</span><i></i><span>INTERNET LOST</span><i></i><span>INTERNET RESTORED</span></div>
+
+    <section class="perspectives">
+      <article class="side-card consumer-card">
+        <div class="side-heading"><div class="side-avatar consumer-avatar">C</div><div><span class="step-kicker">SIDE A</span><h2>Consumer</h2></div><span class="role-tag">WALLET</span></div>
+        <div class="offline-callout"><span class="online-dot"></span><span id="connection-state-copy">Connected · ready for sample flow</span><button id="demo-network-toggle" type="button">Simulate offline</button></div>
+        <div class="consumer-balance"><div><small>LEFT IN SAMPLE OFFLINE LIMIT</small><strong id="offline-allowance-display">₹0.00</strong></div><span class="lock-symbol">◈</span></div>
+        <label class="field-label">PAYMENT AMOUNT<input id="payment-amount" type="number" min="1" step="0.01" value="125"></label>
+        <label class="field-label">MERCHANT<select id="merchant-picker"><option value="merchant-cafe-002">Coffee House</option><option value="merchant-demo-001">Metro Transit</option><option value="merchant-store-003">QuickMart</option></select></label>
+        <input id="merchant-id" type="hidden" value="merchant-cafe-002">
+        <div class="receipt-preview"><div><span>Left after this payment</span><b id="remaining-limit-display">₹0.00</b></div><div><span>Receipt</span><b>Example only</b></div></div>
+        <p id="ble-status" class="microcopy">This website simulates the nearby handoff. It does not use Bluetooth or Android secure hardware.</p>
+        <button id="connect-merchant" type="button" class="button button-quiet full">Prepare sample merchant view</button>
+        <button id="pay" type="button" class="button button-primary full">Make sample offline payment · ₹125 <span>→</span></button>
+      </article>
+
+      <div class="handoff" aria-hidden="true"><span>RECEIPT</span><div>→</div><small>LOCAL HANDOFF</small></div>
+
+      <article class="side-card merchant-card">
+        <div class="side-heading"><div class="side-avatar merchant-avatar">M</div><div><span class="step-kicker">SIDE B</span><h2>Merchant</h2></div><span class="role-tag">SAMPLE VIEW</span></div>
+        <div class="merchant-brand"><div class="merchant-logo">⌂</div><div><strong id="merchant-display-name">Coffee House</strong><small id="merchant-display-id">merchant-cafe-002</small></div></div>
+        <div class="merchant-metrics"><div><small>SAMPLE RECEIPTS</small><strong id="merchant-pending-total">₹0.00</strong></div><div><small>SAMPLE TOTAL</small><strong id="merchant-settled-total">₹0.00</strong></div></div>
+        <div class="merchant-section-title"><span>PAYMENT RECEIPTS</span><span id="receipt-count">0</span></div>
+        <div id="merchant-inbox" class="merchant-inbox"><div class="empty-inbox"><span>⌁</span><p>Sample payment receipts will appear here.</p></div></div>
+        <div class="settlement-note"><span>ⓘ</span><p>This is a browser walkthrough. Reconnect runs a sample check locally; it does not update an account or transfer money.</p></div>
+        <button id="sync-now" class="button button-dark full" type="button">Reconnect and run sample sync <span>⟳</span></button>
+        <div id="sync-timeline-container" class="sync-timeline-card" hidden><div class="timeline-label">LOCAL SIMULATION · NO BACKEND</div><div class="timeline-steps"><div id="step-upload" class="timeline-step">Sample receipt</div><div id="step-sig" class="timeline-step">Example signature check</div><div id="step-cap" class="timeline-step">Example limit check</div><div id="step-settle" class="timeline-step">Simulated result</div></div><p id="sync-timeline-status" class="hint"></p></div>
+      </article>
+    </section>
+
+    <section class="activity-card"><div class="activity-head"><div><span class="step-kicker">SAMPLE DEMO STATE</span><h2>Transaction activity</h2></div><span class="local-storage-tag">Saved in this browser</span></div><div id="transactions" class="transactions"><p class="empty-inbox">No sample transactions yet.</p></div></section>
+    <details class="advanced"><summary>What is included in this demo?</summary><div><p><b>Local simulation:</b> the sample wallet, offline limit, payment receipt, merchant view, and sync result are stored only in this browser. They do not represent real money or real payments.</p><p><b>Mobile app:</b> use the Android app to demonstrate the device payment flow and its connected backend integrations.</p><p><b>Phone connection:</b> this website does not use Bluetooth or Android secure hardware. Its nearby payment animation is simulated.</p></div></details>
+  </main>
+  <p id="notice" class="notice" role="status" aria-live="polite">Ready when you are.</p>
+  <script src="./src/app.js"></script>
+</body>
+</html>

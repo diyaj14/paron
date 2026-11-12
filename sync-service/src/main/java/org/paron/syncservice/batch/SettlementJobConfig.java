@@ -11,6 +11,7 @@ import org.springframework.batch.core.step.Step;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.infrastructure.item.support.ListItemReader;
 import org.springframework.batch.infrastructure.item.ItemReader;
+import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -37,7 +38,11 @@ public class SettlementJobConfig {
      * than one page into memory at a time
      */
     @Bean
+    @StepScope
     public ItemReader<OfflineTransaction> settlementReader() {
+        // A fresh reader is created for every step execution so it sees
+        // transactions that arrived after the service started and does not
+        // reuse an exhausted ListItemReader from an earlier scheduled run.
         List<OfflineTransaction> receivedTransactions =
                 transactionRepository.findByStatus(TransactionStatus.RECEIVED);
         return new ListItemReader<>(receivedTransactions);
