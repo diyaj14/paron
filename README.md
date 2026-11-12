@@ -16,9 +16,8 @@ Render free services can sleep; opening their health-check links wakes them. Wai
 
 | App or service | Public URL | Wake/health check |
 |---|---|---|
-| Paron overview and browser demo | **WEBSITE URL NEEDED** | Open the URL; then choose **Experience Demo** |
 | Android API gateway | [paron-api.onrender.com](https://paron-api.onrender.com) | [/actuator/health](https://paron-api.onrender.com/actuator/health) |
-| Auth service | [paron-auth.onrender.com](https://paron-auth.onrender.com) | [/actuator/health](https://paron-auth.onrender.com/actuator/health) |
+| Auth service | [paron-auth.onrender.com](https://paron-auth.onrender.com) | No standalone health endpoint; verify through the OTP route. |
 | Token service | [token-service-zwy4.onrender.com](https://token-service-zwy4.onrender.com) | [/actuator/health](https://token-service-zwy4.onrender.com/actuator/health) |
 | Ledger service | [paron-8w2t.onrender.com](https://paron-8w2t.onrender.com) | [/actuator/health](https://paron-8w2t.onrender.com/actuator/health) |
 | Sync service | [paron-sync.onrender.com](https://paron-sync.onrender.com) | [/actuator/health](https://paron-sync.onrender.com/actuator/health) |
@@ -26,7 +25,7 @@ Render free services can sleep; opening their health-check links wakes them. Wai
 | PayPal funding service | [paron-paypal-funding.onrender.com](https://paron-paypal-funding.onrender.com) | [/actuator/health](https://paron-paypal-funding.onrender.com/actuator/health) |
 | Risk model | [paron-risk-model.onrender.com](https://paron-risk-model.onrender.com) | [/healthz](https://paron-risk-model.onrender.com/healthz) |
 
-The Android app uses the API gateway URL. The browser demo is preconfigured with the API gateway and PayPal funding URLs above. Add the website's final public URL to this table and set both the API gateway and PayPal funding service `CORS_ALLOWED_ORIGINS` to that exact website origin.
+The Android app uses the API gateway URL. Set both the API gateway and PayPal funding service `CORS_ALLOWED_ORIGINS` to the exact origin of the published website.
 
 ### If a backend URL shows a 404 at `/`
 
@@ -34,7 +33,7 @@ That is expected for these API-only services: they do not serve a website at the
 
 ### If the browser demo says “Failed to fetch”
 
-Open the API gateway and PayPal funding health checks first and wait for both to return a healthy response; Render may need time to wake a sleeping service. Then check that `DEFAULT_API_BASE` and `DEFAULT_FUNDING_BASE` in `pwa/public/src/app.js` match the deployed HTTPS URLs. In Render, set `CORS_ALLOWED_ORIGINS` on both the API gateway and PayPal funding service to the exact website origin (scheme and hostname only, with no path or trailing slash), for example `https://your-site.vercel.app`. Also confirm the gateway's `PAYPAL_FUNDING_SERVICE_URL` points to the funding service's reachable URL. Redeploy after changing environment variables. A 404 at `/` alone does not explain a browser “Failed to fetch”; a sleeping service, wrong URL, CORS rejection, or failed upstream connection can.
+Open the API gateway and PayPal funding health checks first and wait for both to return a healthy response; Render may need time to wake a sleeping service. Then check that `DEFAULT_API_BASE` and `DEFAULT_FUNDING_BASE` in [pwa/public/src/app.js](pwa/public/src/app.js) match the deployed HTTPS URLs. In Render, set `CORS_ALLOWED_ORIGINS` on both the API gateway and PayPal funding service to the exact website origin (scheme and hostname only, with no path or trailing slash). Also confirm the gateway's `PAYPAL_FUNDING_SERVICE_URL` points to the funding service's reachable URL. Redeploy after changing environment variables. A 404 at `/` alone does not explain a browser “Failed to fetch”; a sleeping service, wrong URL, CORS rejection, or failed upstream connection can.
 
 
 ## Mobile app screenshots
@@ -181,17 +180,17 @@ Open OfflinePay-Kotlin-Wallet-App/native/offlinepay-android in Android Studio, l
 
 Set the gateway URL in the app:
 
-- Android emulator: http://10.0.2.2:8080
+- Android emulator: [http://10.0.2.2:8080](http://10.0.2.2:8080)
 - Physical phone on the same Wi-Fi: your computer’s LAN IP with port 8080
 - Hosted backend: use the gateway’s HTTPS URL
 
-For more detailed local setup notes, see [run-guide.md](run-guide.md) and the [Android app README](OfflinePay-Kotlin-Wallet-App/native/offlinepay-android/README.md).
+For more detailed local setup notes, see [docs/run-guide.md](docs/run-guide.md) and the [Android app README](OfflinePay-Kotlin-Wallet-App/native/offlinepay-android/README.md).
 
 ## Two-device Android judge walkthrough
 
 Use the **Paron wallet app on both devices** for the QR flow. The separate `merchant-android/` project is a Bluetooth receiver and merchant-balance viewer; it does not scan QR codes.
 
-1. Start the backend using the local steps above, or point both Android installs at the deployed API gateway. For a local backend, use `http://10.0.2.2:8080` on the emulator and `http://<computer-LAN-IP>:8080` on a physical phone on the same Wi-Fi.
+1. Start the backend using the local steps above, or point both Android installs at the deployed API gateway. For a local backend, use [http://10.0.2.2:8080](http://10.0.2.2:8080) on the emulator. On a physical phone on the same Wi-Fi, enter your computer’s LAN IP followed by port `8080`.
 2. Sign in on the payer/emulator with phone `9876543210` and on the receiving phone with a different demo phone, such as `9876543211`. Use OTP `123456` on both. For Render, `DEMO_AUTH_PASSWORD` on auth-service must be `123456`.
 3. On the payer, reserve an offline amount while online. Confirm the wallet displays that offline balance before proceeding. PayPal Sandbox top-up is optional when the demo wallet already has sufficient balance.
 4. On the payer, open **Pay Offline**, enter an amount within the reserved limit, and create the signed payment QR. On the receiving phone, open **Pay with UPI → Scan QR Code** and scan it. Both phones can then be disconnected from the internet; QR scanning and local signature verification happen on-device.
@@ -210,7 +209,7 @@ Create a Sandbox app and buyer account in the [PayPal Developer Dashboard](https
 
 The demo currently charges in USD and credits the INR test ledger using the configurable `PAYPAL_WALLET_CREDIT_RATE` (default `85.00`). This is a demo conversion rate, not a live exchange rate or a real payout to a merchant. Use Sandbox buyer credentials and test funds to exercise checkout.
 
-If checkout reports `invalid_client` / `PAYPAL_CREDENTIALS_INVALID`, update the **PayPal funding backend** with the Client ID and Secret copied together from one PayPal **Sandbox REST app**, and set `PAYPAL_BASE_URL` to `https://api-m.sandbox.paypal.com`. Save and redeploy the Render funding service; for local development, update the matching entries in `.env` and restart it. Do not place the PayPal secret in Vercel or the Android app. See the [deployment troubleshooting steps](docs/deployguide.md#paypal-funding-paron-paypal-funding).
+If checkout reports `invalid_client` / `PAYPAL_CREDENTIALS_INVALID`, update the **PayPal funding backend** with the Client ID and Secret copied together from one PayPal **Sandbox REST app**, and set `PAYPAL_BASE_URL` to [https://api-m.sandbox.paypal.com](https://api-m.sandbox.paypal.com). Save and redeploy the Render funding service; for local development, update the matching entries in `.env` and restart it. Do not place the PayPal secret in Vercel or the Android app. See the [deployment troubleshooting steps](docs/deployguide.md#paypal-funding-paron-paypal-funding).
 
 ## AI risk model
 
@@ -218,10 +217,6 @@ The risk model service is configured to load a versioned calibrated logistic-reg
 
 The checked-in evaluation uses synthetic data (4,000 generated records, with 3,554 eligible for model scoring). Its metrics demonstrate the pipeline on generated scenarios; they are not claims about real-world fraud detection or production performance. See the [model evaluation report](docs/reports/phase2-evaluation.md), [scenario data card](docs/scenario-data-card.md), and [fraud drill](ml/fraud_drill.py).
 
-
-**Demo video:** *Add public YouTube link here.*
-
-**Android build:** *Add APK or release link here.*
 
 ## Repository map
 
@@ -243,8 +238,8 @@ docs/                        Architecture, reports, and demo material
 
 ## Documentation
 
-- [Free Render deployment guide](deployguide.md)
-- [Local run guide](run-guide.md)
+- [Free Render deployment guide](docs/deployguide.md)
+- [Local run guide](docs/run-guide.md)
 - [Architecture](docs/architecture.md)
 - [Two-phone demo](docs/two-phone-demo.md)
 - [Risk evaluation](docs/reports/phase2-evaluation.md)

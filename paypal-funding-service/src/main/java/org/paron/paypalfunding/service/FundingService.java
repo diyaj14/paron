@@ -3,6 +3,7 @@ package org.paron.paypalfunding.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.paron.paypalfunding.api.CreateFundingRequest;
 import org.paron.paypalfunding.api.PaypalPublicConfig;
 import org.paron.paypalfunding.api.FundingResponse;
@@ -15,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-@Service @RequiredArgsConstructor
+@Service @RequiredArgsConstructor @Slf4j
 public class FundingService {
     private final FundingAttemptRepository attempts;
     private final PaypalClient paypal;
@@ -57,6 +58,8 @@ public class FundingService {
                 .orElseThrow(() -> new EntityNotFoundException("Unknown PayPal order"));
         if (!attempt.getUserId().equals(authenticatedUserId)) throw new EntityNotFoundException("Unknown PayPal order");
         if (attempt.getStatus() == FundingStatus.CREDITED) return FundingResponse.from(attempt, null);
+        log.info("Confirming PayPal funding attempt. fundingId={}, currentStatus={}",
+                attempt.getId(), attempt.getStatus());
         // A local timeout does not roll back PayPal. Inspect its authoritative
         // order state first; capture only when it has not already completed.
         JsonNode response = paypal.getOrder(paypalOrderId);
@@ -71,6 +74,7 @@ public class FundingService {
         }
         attempt.setPaypalCaptureId(required(capture, "id"));
         attempt.setStatus(FundingStatus.CAPTURED);
+        log.info("PayPal capture verified; applying ledger credit. fundingId={}", attempt.getId());
         // PayPal Sandbox charges USD, while Paron's demo ledger is denominated in INR.
         // Apply the explicitly disclosed demo rate only after PayPal capture is verified.
         ledger.credit(attempt.getId(), attempt.getUserId(), attempt.getAmount().multiply(walletCreditRate).setScale(2, java.math.RoundingMode.HALF_UP));
