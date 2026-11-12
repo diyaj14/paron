@@ -1,5 +1,6 @@
 server:
-  port: 8086
+  # Render injects PORT; keep 8086 as the local development default.
+  port: ${PORT:8086}
 
 spring:
   config:
